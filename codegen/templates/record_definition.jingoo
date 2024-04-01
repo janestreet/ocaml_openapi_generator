@@ -1,0 +1,6 @@
+type t =
+  {
+  {%- for field in fields %}
+    {{ field.name }} : {{ field.type_reference }} {%- if field.optional %} [@jsonaf.option] {%- else -%} {%- endif %} [@key {xxx|{{ field.api_name }}|xxx}];
+  {%- endfor %}
+  } [@@deriving fields ~getters, sexp, jsonaf]

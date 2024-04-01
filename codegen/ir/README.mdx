@@ -1,0 +1,68 @@
+# Openapi_codegen_ir
+
+This part of the OpenAPI library contains various tools to map constructs in the
+OpenAPI specification into OCaml constructs.
+
+
+## Methods / Parameters / Responses
+
+These modules take the parsed OpenAPI spec and convert it to an intermediate 
+representation that contains information relevant to the generation of OCaml code.
+They collapse all the references present in the spec, deduplicate them, and
+give you a single `Operation_method.t` for purposes of building a function.
+
+These modules are heavily inspired by the
+[Progenitor](https://github.com/oxidecomputer/progenitor) Rust crate because the
+crate is well built and seems to work on a wide variety of specs. If you're adding a new
+feature to this, you should read `progenitor-impl/src/method.rs` first to see if Oxide
+did it.
+
+## Typify
+
+Typify converts JSON Schema to OCaml types. It's heavily inspired by the
+[Rust crate with the same name](https://github.com/oxidecomputer/typify).
+
+A type space stores information about all the types used in the JSON Schema, such as
+their shape and how they relate to each other. If something else in Jane Street ever
+needs to parse JSON Schemas, you could break this file out into its own library with
+more robust inference.
+
+### Built-in types
+
+In JSON Schema, types are defined by `type` and `format`. The below table maps
+`type` and `format` to OCaml type. JSON Schema has unsigned integer types but
+OCaml does not (except in `Stdlib`, but we use `Core`, so...), so we give up and hope
+that the unsigned integer fits in a regular `int` (63 bit OCaml integer).
+
+Some types are unimplemented simply because we haven't needed them yet. You can find
+the rest [on the JSON Schema website](https://json-schema.org/understanding-json-schema/reference/type.html).
+
+- `integer`/`int64` -> `Int64.t`
+- `integer`/`*` -> `int`
+- `number`/`double` -> `float`
+- `boolean`/`*` -> `bool`
+- `string`/`ip` -> `Ipaddr_jane.t`
+- `string`/`ipv4` -> `Ipaddr_jane.V4.t`
+- `string`/`ipv6` -> `Ipaddr_jane.V6.t`
+- `string`/`uuid` -> `Uuid.t`
+- `string`/`*` (with a specific value) -> `unit`
+- `string`/`*` -> `string`
+
+### Arrays
+
+JSON Schema arrays intuitively turn into `'a list`s in OCaml.
+
+### Objects
+
+Objects turn in to OCaml record types wrapped in an OCaml module.
+
+### OneOf
+
+The OneOf construct maps to a OCaml variant type, with each variant being
+`of` whatever the type of the variant is.
+
+### AnyOf / AllOf
+
+The anyOf and allOf constructs are tricky to handle in OCaml, so Typify hopes that they
+only have one element inside them. If so, it passes through the type of the one underlying
+element. Otherwise, it gives up and returns `Jsonaf.t`

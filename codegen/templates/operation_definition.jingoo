@@ -1,0 +1,51 @@
+open! Core
+open! Async
+open! Deferred.Or_error.Let_syntax
+open! Openapi_runtime.Jane_with_json
+open! Openapi_runtime.Client
+open! Jsonaf.Export
+
+{% for operation in operations -%}
+let {{ operation.operation_id }}
+    {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
+    {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
+    {% if operation.has_body %}~body{%- endif %}
+    t
+    =
+  let query_parameters =
+    List.filter_opt
+      [{% for param in operation.query_parameters %}
+       {% if param.is_required -%}
+         Some ({{ param.to_query_parameter }} ~key:{|{{ param.api_name }}|} ~value:{{ param.name }})
+       {%- else -%}
+         Option.map {{ param.name }} ~f:(fun value -> {{ param.to_query_parameter }} ~key:{|{{ param.api_name }}|} ~value)
+       {%- endif %};
+       {% endfor %}]
+    |> List.concat_map
+      ~f:Openapi_runtime.Query_parameters.to_list
+  in
+  let path_template = Openapi_runtime.Path_template.t_of_sexp (Sexp.of_string {|{{ operation.operation_path }}|}) in
+  let%bind path =
+    Openapi_runtime.Path_template.render_path
+    ~parameters:(String.Map.of_alist_exn [{% for param in operation.path_parameters %}{|{{ param.api_name }}|}, {{ param.name }};{% endfor %}])
+    path_template
+    |> Result.of_option ~error:(Core.Error.of_string {|unable to render path|})
+    |> Deferred.return
+  in
+  let url = Uri.of_string (t.base_url ^ path) in
+  let url = Uri.add_query_params url query_parameters in
+  let%bind response =
+    t.make_request
+      ?body:{% if operation.has_body %}(Some (Jsonaf.to_string ({{ operation.body_module }}.jsonaf_of_t body))){% else %}None{% endif %}
+      t
+      url
+      {{ operation.endpoint_method }}
+  in
+  {% if operation.has_response -%}
+  Monitor.try_with_or_error (fun () -> Deferred.return ({{ operation.response_module }}.t_of_jsonaf (Jsonaf.of_string (t.response_to_string response))))
+  {%- else -%}
+  ignore response;
+  Deferred.Or_error.ok_unit
+  {%- endif %}
+;;
+{% endfor %}

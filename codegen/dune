@@ -1,0 +1,19 @@
+(library
+ (name openapi_codegen)
+ (libraries core async httpaf jsonaf openapi_spec openapi_codegen_ir
+   openapi_runtime jingoo)
+ (preprocess
+  (pps ppx_jane ppx_jsonaf_conv)))
+
+(rule
+ (targets embedded_strings.ml embedded_strings.mli)
+ (deps %{bin:ocaml-embed-file} ./templates/jbuild.jingoo
+   ./templates/types.ml.jingoo ./templates/type_definition.ml.jingoo
+   ./templates/operations.ml.jingoo ./templates/record_definition.jingoo
+   ./templates/variant_definition.jingoo
+   ./templates/variant_definition_object.jingoo
+   ./templates/variant_definition_transparent.jingoo
+   ./templates/operation_definition.jingoo ./templates/jane_object_tag.ml
+   ./templates/module_aliases.ml.jingoo)
+ (action
+  (bash "%{deps} -output embedded_strings")))

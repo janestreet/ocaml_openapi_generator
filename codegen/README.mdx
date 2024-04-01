@@ -1,0 +1,16 @@
+# Openapi_codegen
+
+This module handles converting a parsed OpenAPI specification from `Openapi_spec` into
+an intermediate representation (`Openapi_codegen_ir`) and then into actual OCaml code.
+
+## Usage
+
+You likely do not want to use this module directly. See `Openapi_cli` instead to generate
+OCaml code from an OpenAPI specification.
+
+## Why templates?
+
+The first thing I wanted to do was iteratively build up an OCaml AST and then recurse
+over the AST to generate OCaml. Unfortunately, there are not that many weeks in an 
+intern project, so to save a day or two this project uses templates. Someday we can rewrite
+the backend to generate an AST instead.

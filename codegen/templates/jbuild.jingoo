@@ -1,0 +1,4 @@
+(library
+  (name {{ name }})
+  (libraries core async httpaf jsonaf uri ocaml_openapi_generator.openapi_runtime)
+  (preprocess (pps ppx_jane ppx_jsonaf_conv)))

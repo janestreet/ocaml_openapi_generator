@@ -1,0 +1,5 @@
+(library
+ (name openapi_codegen_ir)
+ (libraries core async httpaf jsonaf openapi_spec openapi_runtime)
+ (preprocess
+  (pps ppx_jane ppx_jsonaf_conv)))

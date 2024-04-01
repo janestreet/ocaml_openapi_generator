@@ -1,0 +1,5 @@
+module Jane_object_tag = Jane_object_tag
+
+{% for type_ in types %}
+module {{ type_ }} = {{ type_ }}
+{% endfor %}

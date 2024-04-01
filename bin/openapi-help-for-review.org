@@ -1,0 +1,72 @@
+* openapi.exe
+
+: inspect and transform OpenAPI specifications
+: 
+:   openapi.exe SUBCOMMAND
+: 
+: === subcommands ===
+: 
+:   generate                   . generate an OCaml library into a directory
+:   inspect                    . parse and display summarized information about a
+:                                spec
+:   version                    . print version information
+:   help                       . explain a given subcommand (perhaps recursively)
+
+** version
+
+: print version information
+: 
+:   openapi.exe version 
+: 
+: === flags ===
+: 
+:   [-build-info]              . print build info for this build
+:   [-version]                 . print the version of this build
+:   [-help], -?                . print this help text and exit
+
+** generate
+
+: generate an OCaml library into a directory
+: 
+:   openapi.exe generate 
+: 
+: === flags ===
+: 
+:   -name STRING               . project name
+:   -out DIR                   . the output directory
+:   -spec FILE                 . a v3.0.3 specfile
+:   [-help], -?                . print this help text and exit
+
+** inspect
+
+: parse and display summarized information about a spec
+: 
+:   openapi.exe inspect SUBCOMMAND
+: 
+: === subcommands ===
+: 
+:   paths                      . summarize API endpoints
+:   types                      . summarize types
+:   help                       . explain a given subcommand (perhaps recursively)
+
+*** paths
+
+: summarize API endpoints
+: 
+:   openapi.exe inspect paths 
+: 
+: === flags ===
+: 
+:   -spec FILE                 . a v3.0.3 specfile
+:   [-help], -?                . print this help text and exit
+
+*** types
+
+: summarize types
+: 
+:   openapi.exe inspect types 
+: 
+: === flags ===
+: 
+:   -spec FILE                 . a v3.0.3 specfile
+:   [-help], -?                . print this help text and exit

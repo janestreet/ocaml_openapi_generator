@@ -1,0 +1,16 @@
+{%- autoescape false -%}
+type t =
+  {% for variant in variants %}| {{ variant.name }}
+  {% endfor %} [@@deriving sexp]
+
+let jsonaf_of_t = function
+  {% for variant in variants %}| {{ variant.name }} -> {{ variant.ocaml }}
+  {% endfor -%}
+;;
+
+let t_of_jsonaf = function
+  {% for variant in variants %}| {{ variant.ocaml }} -> {{ variant.name }}
+  {% endfor -%}
+  | _ -> failwith {|unable to parse {{ module_name }}|}
+;;
+{%- endautoescape -%}

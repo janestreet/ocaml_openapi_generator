@@ -1,0 +1,9 @@
+{%- autoescape false -%}
+module Jane_object_tag = Jane_object_tag
+module Operations = Operations
+module Types = Types
+
+{% for module in modules %}
+module {{ module.nice_name }} = {{ module.real_name }}
+{% endfor %}
+{%- endautoescape -%}

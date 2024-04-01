@@ -1,0 +1,26 @@
+{%- autoescape false -%}
+type t =
+  {% for variant in variants %}| {{ variant.name }} of {{ variant.module }}.t
+  {% endfor %} [@@deriving sexp]
+
+let jsonaf_of_t = function
+  {% for variant in variants %}| {{ variant.name }} v ->
+      {{ variant.module }}.jsonaf_of_t v
+      |> Openapi_runtime.Tagged_object.inject
+          ~tag:{|{{ variant.api_name }}|}
+          ~value:{|{{ variant.tag }}|}
+  {% endfor -%}
+;;
+
+let t_of_jsonaf json =
+  let tag, rest = Openapi_runtime.Tagged_object.retrieve
+      ~tag:{|{{ tag }}|}
+      json
+  in
+  match tag with
+  {% for variant in variants %}| {|{{ variant.api_name }}|} ->
+      {{ variant.name }} ({{ variant.module }}.t_of_jsonaf rest)
+  {% endfor -%}
+  | _ -> failwith {|unable to parse {{ module_name }}|}
+;;
+{%- endautoescape -%}

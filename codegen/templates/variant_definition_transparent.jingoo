@@ -1,0 +1,17 @@
+{%- autoescape false -%}
+type t =
+  {% for variant in variants %}| {{ variant.name }} of {{ variant.module }}.t
+  {% endfor %} [@@deriving sexp]
+
+let jsonaf_of_t = function
+  {% for variant in variants %}| {{ variant.name }} v -> {{ variant.module }}.jsonaf_of_t v
+  {% endfor -%}
+;;
+
+let t_of_jsonaf json =
+  {% for variant in variants %}try {{ variant.name }} ({{ variant.module }}.t_of_jsonaf json) with
+  _ ->
+  {% endfor -%}
+  failwith {|{{ variant.module }} failed to parse (transparent variant)|}
+;;
+{%- endautoescape -%}
