@@ -18,7 +18,7 @@ depends: [
   "jsonaf"
   "ppx_jane"
   "ppx_jsonaf_conv"
-  "dune"             {>= "2.0.0"}
+  "dune"             {>= "3.11.0"}
   "httpaf"           {>= "0.7.1"}
   "jingoo"           {>= "1.4.4" & < "1.5.0"}
   "ocaml-embed-file"
