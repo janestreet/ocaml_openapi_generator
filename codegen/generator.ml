@@ -114,11 +114,11 @@ let get_type_names ~type_space =
   Map.to_alist type_space_map
   |> List.map ~f:(fun (type_id, type_) -> type_id, Type.name type_)
   |> List.map ~f:(fun (type_id, type_name) ->
-       type_definition ~type_id ~type_space, type_name)
+    type_definition ~type_id ~type_space, type_name)
   |> List.filter_map ~f:(fun (type_definition, type_name) ->
-       match type_definition with
-       | None -> None
-       | Some _ -> Some type_name)
+    match type_definition with
+    | None -> None
+    | Some _ -> Some type_name)
   |> List.dedup_and_sort ~compare:Name.compare
 ;;
 
@@ -127,17 +127,17 @@ let make_type_mls ~type_space =
   Map.to_alist type_space_map
   |> List.map ~f:(fun (type_id, type_) -> type_id, Type.name type_)
   |> List.map ~f:(fun (type_id, type_name) ->
-       type_definition ~type_id ~type_space, type_name)
+    type_definition ~type_id ~type_space, type_name)
   |> List.filter_map ~f:(fun (type_definition, type_name) ->
-       match type_definition with
-       | None -> None
-       | Some type_definition -> Some (type_definition, type_name))
+    match type_definition with
+    | None -> None
+    | Some type_definition -> Some (type_definition, type_name))
   |> List.map ~f:(fun (module_definition, type_name) ->
-       let models = [ "module", Tstr module_definition ] in
-       let definition_str =
-         Jg_template.from_string ~env ~models type_definition_dot_ml_dot_jingoo
-       in
-       definition_str, type_name)
+    let models = [ "module", Tstr module_definition ] in
+    let definition_str =
+      Jg_template.from_string ~env ~models type_definition_dot_ml_dot_jingoo
+    in
+    definition_str, type_name)
 ;;
 
 let generate_to_query_parameter ~type_space operation_parameter =
@@ -199,41 +199,39 @@ let operation_model ~operation ~type_space =
   let body =
     operation_parameters
     |> List.map ~f:(fun param ->
-         match Operation_parameter.kind param with
-         | Body _ -> Some param
-         | _ -> None)
+      match Operation_parameter.kind param with
+      | Body _ -> Some param
+      | _ -> None)
     |> List.filter_opt
     |> List.hd
   in
   let path_parameters =
     operation_parameters
     |> List.filter_map ~f:(fun param ->
-         match Operation_parameter.kind param with
-         | Path -> Some param
-         | _ -> None)
+      match Operation_parameter.kind param with
+      | Path -> Some param
+      | _ -> None)
     |> List.map ~f:(fun param ->
-         Tobj
-           [ "name", Tstr (Operation_parameter.name param |> Name.to_variable_name)
-           ; "api_name", Tstr (Operation_parameter.name param |> Name.to_raw_string)
-           ])
+      Tobj
+        [ "name", Tstr (Operation_parameter.name param |> Name.to_variable_name)
+        ; "api_name", Tstr (Operation_parameter.name param |> Name.to_raw_string)
+        ])
   in
   let query_parameters =
     operation_parameters
     |> List.filter_map ~f:(fun param ->
-         let%bind.Option is_required =
-           match Operation_parameter.kind param with
-           | Path | Header _ | Body _ -> None
-           | Query is_required -> Some is_required
-         in
-         let%map.Option to_query_parameter =
-           generate_to_query_parameter ~type_space param
-         in
-         Tobj
-           [ "name", Tstr (Operation_parameter.name param |> Name.to_variable_name)
-           ; "api_name", Tstr (Operation_parameter.name param |> Name.to_raw_string)
-           ; "is_required", Tbool is_required
-           ; "to_query_parameter", Tstr to_query_parameter
-           ])
+      let%bind.Option is_required =
+        match Operation_parameter.kind param with
+        | Path | Header _ | Body _ -> None
+        | Query is_required -> Some is_required
+      in
+      let%map.Option to_query_parameter = generate_to_query_parameter ~type_space param in
+      Tobj
+        [ "name", Tstr (Operation_parameter.name param |> Name.to_variable_name)
+        ; "api_name", Tstr (Operation_parameter.name param |> Name.to_raw_string)
+        ; "is_required", Tbool is_required
+        ; "to_query_parameter", Tstr to_query_parameter
+        ])
   in
   let body_module =
     let%bind.Option body = body in
@@ -300,8 +298,13 @@ let make_operation_definition_ml ~operation_list ~type_space =
   Jg_template.from_string ~env ~models operation_definition_dot_jingoo
 ;;
 
-let make_jbuild ~name =
-  let models = [ "name", Tstr name ] in
+let make_jbuild ~name ~spec_file ~paths =
+  let models =
+    [ "name", Tstr name
+    ; "spec", Tstr spec_file
+    ; "targets", paths |> Set.to_list |> String.concat ~sep:"\n" |> Tstr
+    ]
+  in
   Jg_template.from_string ~env ~models jbuild_dot_jingoo
 ;;
 
@@ -311,27 +314,27 @@ let make_operation_method_lists ~type_space ~paths ~components =
       paths
       ~init:(Name.Map.empty, type_space)
       ~f:(fun ~key ~data:_ (new_map, type_space) ->
-      let path = key in
-      let path_item = Map.find_exn paths path in
-      let operations = Path_item.all_operations path_item in
-      let operation_methods, type_space =
-        List.fold
-          operations
-          ~init:([], type_space)
-          ~f:(fun (lst, type_space) (http_method, op) ->
-          Openapi_codegen_ir.Operation_method.of_operation
-            ~path
-            ~http_method
-            ~path_parameters:[]
-            ~components
-            ~type_space
-            op
-          |> Option.map ~f:(fun (operation_method, type_space) ->
-               lst @ [ operation_method ], type_space)
-          |> Option.value ~default:(lst, type_space))
-      in
-      let key = Name.of_operation_path key in
-      Map.add_exn new_map ~key ~data:operation_methods, type_space)
+        let path = key in
+        let path_item = Map.find_exn paths path in
+        let operations = Path_item.all_operations path_item in
+        let operation_methods, type_space =
+          List.fold
+            operations
+            ~init:([], type_space)
+            ~f:(fun (lst, type_space) (http_method, op) ->
+              Openapi_codegen_ir.Operation_method.of_operation
+                ~path
+                ~http_method
+                ~path_parameters:[]
+                ~components
+                ~type_space
+                op
+              |> Option.map ~f:(fun (operation_method, type_space) ->
+                lst @ [ operation_method ], type_space)
+              |> Option.value ~default:(lst, type_space))
+        in
+        let key = Name.of_operation_path key in
+        Map.add_exn new_map ~key ~data:operation_methods, type_space)
   in
   Map.to_alist new_map, type_space
 ;;
@@ -358,30 +361,78 @@ let make_module_aliases_ml
                  , Tstr (Name.to_truncated_name operation_path |> String.capitalize) )
                ])
            @ List.map type_file_names ~f:(fun name ->
-               Tobj [ "nice_name", Tstr name; "real_name", Tstr name ])) )
+             Tobj [ "nice_name", Tstr name; "real_name", Tstr name ])) )
     ]
   in
   Jg_template.from_string ~env ~models module_aliases_dot_ml_dot_jingoo
 ;;
 
-let make_files ~config ~api =
+let non_colliding_operation_name names proposal =
+  let rec non_colliding_operation_name try_ =
+    let new_name =
+      String.concat
+        [ Name.to_raw_string proposal
+        ; "_operations"
+        ; (if try_ = 0 then "" else Int.to_string try_)
+        ]
+      |> Name.of_operation_path
+    in
+    if List.exists names ~f:(Name.filenames_equal new_name)
+    then non_colliding_operation_name (try_ + 1)
+    else new_name
+  in
+  if List.exists names ~f:(Name.filenames_equal proposal)
+  then non_colliding_operation_name 0
+  else proposal
+;;
+
+(* The operation list module names are purely used to write to a file. Let us just rename
+   them to something unique if it collides with a type name. *)
+let disambiguate_names (operation_lists, type_space) =
+  let type_names =
+    Type_space.to_map type_space |> Map.data |> List.map ~f:Typify.Type.name
+  in
+  let operation_names = List.map operation_lists ~f:fst in
+  let _all_names, new_operation_lists =
+    List.fold
+      operation_lists
+      ~init:(operation_names, [])
+      ~f:(fun (operation_names, operation_lists) (path, operations) ->
+        let operation_names_without_current =
+          List.filter operation_names ~f:(Fn.non (Name.equal path))
+        in
+        let new_operation_name =
+          non_colliding_operation_name (type_names @ operation_names_without_current) path
+        in
+        ( new_operation_name :: operation_names_without_current
+        , (new_operation_name, operations) :: operation_lists ))
+  in
+  (* preserve original order *)
+  List.rev new_operation_lists, type_space
+;;
+
+let make_files ~config ~api ~spec_file =
   let components = Open_api.components api in
   let destination = Config.destination config in
-  let mkpath rel_path = Filename.of_parts [ destination; String.lowercase rel_path ] in
+  let files_written = Hash_set.create (module String) in
+  let mkpath rel_path =
+    Hash_set.add files_written rel_path;
+    Filename.of_parts [ destination; String.lowercase rel_path ]
+  in
   let type_space = Openapi_codegen_ir.Typify.Type_space.empty in
   let paths = Open_api.paths api in
   let operation_lists, type_space =
-    make_operation_method_lists ~type_space ~paths ~components
+    make_operation_method_lists ~type_space ~paths ~components |> disambiguate_names
   in
   let%bind.Deferred () =
     Deferred.List.iter
       operation_lists
       ~how:(`Max_concurrent_jobs 16)
       ~f:(fun (key, operation_list) ->
-      let filename = Name.to_truncated_name key ^ ".ml" in
-      Writer.with_file (mkpath filename) ~f:(fun writer ->
-        Writer.write writer (make_operation_definition_ml ~operation_list ~type_space);
-        Deferred.return ()))
+        let filename = Name.to_truncated_name key ^ ".ml" in
+        Writer.with_file (mkpath filename) ~f:(fun writer ->
+          Writer.write writer (make_operation_definition_ml ~operation_list ~type_space);
+          Deferred.return ()))
   in
   let%bind.Deferred () =
     Writer.with_file
@@ -401,11 +452,11 @@ let make_files ~config ~api =
       ~how:`Sequential
       files_to_write
       ~f:(fun (file_contents, filename) ->
-      Writer.with_file
-        (mkpath ((Name.to_module_name filename |> String.uncapitalize) ^ ".ml"))
-        ~f:(fun writer ->
-          Writer.write writer file_contents;
-          Deferred.return ()))
+        Writer.with_file
+          (mkpath (Name.to_truncated_name filename ^ ".ml"))
+          ~f:(fun writer ->
+            Writer.write writer file_contents;
+            Deferred.return ()))
   in
   let%bind.Deferred () =
     Writer.with_file (mkpath "types.ml") ~f:(fun writer ->
@@ -418,8 +469,13 @@ let make_files ~config ~api =
       Deferred.return ())
   in
   let%bind.Deferred () =
-    Writer.with_file (mkpath "dune") ~f:(fun writer ->
-      Writer.write writer (make_jbuild ~name:config.name);
+    Writer.with_file (mkpath "dune.corrected") ~f:(fun writer ->
+      Writer.write
+        writer
+        (make_jbuild
+           ~name:config.name
+           ~spec_file
+           ~paths:(Set.of_hash_set (module String) files_written));
       Deferred.return ())
   in
   Deferred.Or_error.return ()

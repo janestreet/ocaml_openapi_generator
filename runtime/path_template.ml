@@ -16,13 +16,13 @@ let of_template_string template =
   String.split ~on:'/' template
   |> List.tl
   |> Option.map ~f:(fun lst ->
-       List.map lst ~f:(fun str ->
-         let maybe_parameter =
-           let%bind str = String.chop_prefix str ~prefix:"{" in
-           String.chop_suffix str ~suffix:"}"
-         in
-         Option.value_map maybe_parameter ~default:(Constant str) ~f:(fun parameter ->
-           Parameter parameter)))
+    List.map lst ~f:(fun str ->
+      let maybe_parameter =
+        let%bind str = String.chop_prefix str ~prefix:"{" in
+        String.chop_suffix str ~suffix:"}"
+      in
+      Option.value_map maybe_parameter ~default:(Constant str) ~f:(fun parameter ->
+        Parameter parameter)))
 ;;
 
 let render_path ?(parameters = String.Map.empty) (t : t) =

@@ -11,3 +11,4 @@ val to_variable_name : t -> string
 val to_raw_string : t -> string
 val to_truncated_name : t -> string
 val of_operation_path : string -> t
+val filenames_equal : t -> t -> bool

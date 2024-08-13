@@ -2,3 +2,17 @@
   (name {{ name }})
   (libraries core async httpaf jsonaf uri ocaml_openapi_generator.openapi_runtime)
   (preprocess (pps ppx_jane ppx_jsonaf_conv)))
+
+(rule 
+  (targets 
+{{ targets }}
+  )
+  (mode promote)
+  (deps (:openapi %{bin:ocaml-openapi-generator}) {{ spec }} dune)
+  (action (run %{openapi} generate -name {{ name }} -spec {{ spec }} -out .)))
+
+(rule
+ (alias runtest)
+ (deps dune.corrected)
+ (action (diff dune dune.corrected)))
+

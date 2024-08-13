@@ -43,7 +43,9 @@ let%expect_test "retrieve basic test" =
   in
   print_endline tag;
   print_endline (Jsonaf.to_string json);
-  return [%expect {|
+  return
+    [%expect
+      {|
       creating
       {"state":"creating","example":"text"}
       |}]

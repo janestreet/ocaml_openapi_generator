@@ -1,6 +1,7 @@
 (library
  (name openapi_runtime)
  (public_name ocaml_openapi_generator.openapi_runtime)
- (libraries async core httpaf jsonaf openapi_spec uri core_kernel.uuid)
+ (libraries async core httpaf jsonaf openapi_spec core_unix.time_ns_unix uri
+   core_kernel.uuid)
  (preprocess
   (pps ppx_jane ppx_jsonaf_conv)))

@@ -19,5 +19,10 @@ val make_operation_method_list
   -> Operation_method.t list * Type_space.t
 
 val make_type_mls : type_space:Type_space.t -> (string * Name.t) list
-val make_jbuild : name:string -> string
-val make_files : config:Config.t -> api:Open_api.t -> unit Deferred.Or_error.t
+val make_jbuild : name:string -> spec_file:string -> paths:Set.M(String).t -> string
+
+val make_files
+  :  config:Config.t
+  -> api:Open_api.t
+  -> spec_file:string
+  -> unit Deferred.Or_error.t

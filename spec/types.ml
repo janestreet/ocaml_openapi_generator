@@ -547,9 +547,9 @@ end = struct
     ; `TRACE, t.trace
     ]
     |> List.map ~f:(fun (http_method, opt) ->
-         match opt with
-         | Some operation -> Some (http_method, operation)
-         | None -> None)
+      match opt with
+      | Some operation -> Some (http_method, operation)
+      | None -> None)
     |> List.filter_opt
   ;;
 end

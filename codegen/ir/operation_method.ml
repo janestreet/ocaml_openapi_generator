@@ -34,9 +34,9 @@ let infer_operation_id ~path ~http_method =
     String.to_list safe_str
     |> List.mapi ~f:(fun ind c -> ind, c)
     |> List.filter_map ~f:(fun (ind, ch) ->
-         if ind > 0 && Char.equal ch '_' && Char.equal safe_str.[ind - 1] '_'
-         then None
-         else Some ch)
+      if ind > 0 && Char.equal ch '_' && Char.equal safe_str.[ind - 1] '_'
+      then None
+      else Some ch)
     |> String.of_list
   in
   a
@@ -58,39 +58,38 @@ let make_parameter_list ~path_parameters ~components ~operation_id ~type_space ~
     | `Both (l, _r) -> Some l)
   |> Hashtbl.to_alist
   |> List.fold ~init:([], type_space) ~f:(fun (lst, type_space) (api_name, parameter) ->
-       let parameter_data = Parameter.data parameter in
-       [%log.global.debug
-         "Processing parameter" (api_name : string) (operation_id : string)];
-       (let%bind schema = parameter_data |> Parameter.Parameter_data.schema in
-        let type_id, type_space =
-          Type_space.add_schema ~name:api_name ~schema ~components type_space
-        in
-        let type_ = Operation_parameter.Operation_parameter_type.Type type_id in
-        let description = Parameter.Parameter_data.description parameter_data in
-        let create = Operation_parameter.create ~name:api_name ~description ~type_ in
-        match parameter with
-        | Path { parameter_data; _ } ->
-          assert parameter_data.required;
-          Some (create ~kind:Operation_parameter.Operation_parameter_kind.Path, type_space)
-        | Query { parameter_data; _ } ->
-          let required = parameter_data.required in
-          Some
-            ( create ~kind:(Operation_parameter.Operation_parameter_kind.Query required)
-            , type_space )
-        | Header _ ->
-          [%log.global.error
-            "Skipping parameter, headers are not supported."
-              (api_name : string)
-              (operation_id : string)];
-          None
-        | Cookie _ ->
-          [%log.global.error
-            "Skipping parameter, cookies are not supported."
-              (api_name : string)
-              (operation_id : string)];
-          None)
-       |> Option.map ~f:(fun (param, type_space) -> lst @ [ param ], type_space)
-       |> Option.value ~default:(lst, type_space))
+    let parameter_data = Parameter.data parameter in
+    [%log.global.debug "Processing parameter" (api_name : string) (operation_id : string)];
+    (let%bind schema = parameter_data |> Parameter.Parameter_data.schema in
+     let type_id, type_space =
+       Type_space.add_schema ~name:api_name ~schema ~components type_space
+     in
+     let type_ = Operation_parameter.Operation_parameter_type.Type type_id in
+     let description = Parameter.Parameter_data.description parameter_data in
+     let create = Operation_parameter.create ~name:api_name ~description ~type_ in
+     match parameter with
+     | Path { parameter_data; _ } ->
+       assert parameter_data.required;
+       Some (create ~kind:Operation_parameter.Operation_parameter_kind.Path, type_space)
+     | Query { parameter_data; _ } ->
+       let required = parameter_data.required in
+       Some
+         ( create ~kind:(Operation_parameter.Operation_parameter_kind.Query required)
+         , type_space )
+     | Header _ ->
+       [%log.global.error
+         "Skipping parameter, headers are not supported."
+           (api_name : string)
+           (operation_id : string)];
+       None
+     | Cookie _ ->
+       [%log.global.error
+         "Skipping parameter, cookies are not supported."
+           (api_name : string)
+           (operation_id : string)];
+       None)
+    |> Option.map ~f:(fun (param, type_space) -> lst @ [ param ], type_space)
+    |> Option.value ~default:(lst, type_space))
 ;;
 
 let make_response_list ~operation ~components ~type_space =
@@ -100,21 +99,21 @@ let make_response_list ~operation ~components ~type_space =
     |> List.fold
          ~init:([], type_space)
          ~f:(fun (lst, type_space) (status, response_or_ref) ->
-         (let open Operation_response in
-          let open Operation_response_type in
-          let%bind response = resolve_response_ref ~components response_or_ref in
-          let status = Operation_response_status.of_string status in
-          let%bind type_, type_space =
-            let media_types = Response.content response in
-            let%bind media_type = Map.find media_types "application/json" in
-            let%map schema = Media_type.schema media_type in
-            let type_id, type_space =
-              Type_space.add_schema ~schema ~components type_space
+           (let open Operation_response in
+            let open Operation_response_type in
+            let%bind response = resolve_response_ref ~components response_or_ref in
+            let status = Operation_response_status.of_string status in
+            let%bind type_, type_space =
+              let media_types = Response.content response in
+              let%bind media_type = Map.find media_types "application/json" in
+              let%map schema = Media_type.schema media_type in
+              let type_id, type_space =
+                Type_space.add_schema ~schema ~components type_space
+              in
+              Resolved type_id, type_space
             in
-            Resolved type_id, type_space
-          in
-          Some (lst @ [ status, type_ ], type_space))
-         |> Option.value ~default:(lst, type_space))
+            Some (lst @ [ status, type_ ], type_space))
+           |> Option.value ~default:(lst, type_space))
   in
   ( List.map response_list ~f:(fun (status_code, type_id) ->
       Operation_response.create ~status_code ~type_id ~description:None)

@@ -171,13 +171,13 @@ module Type_space = struct
       ref_of_id ~ref_ t
       |> Option.map ~f:(fun type_id -> type_id, t)
       |> Option.value_or_thunk ~default:(fun () ->
-           let resolved_reference =
-             resolve_schema_ref ~components schema |> Option.value_exn
-           in
-           let schema = Or_reference.Value resolved_reference in
-           let name = Reference.last_segment ref_ |> Option.value_exn in
-           let type_id, new_t = add_schema ~name ~schema ~components t in
-           type_id, add_ref ~type_id ~ref_ new_t)
+        let resolved_reference =
+          resolve_schema_ref ~components schema |> Option.value_exn
+        in
+        let schema = Or_reference.Value resolved_reference in
+        let name = Reference.last_segment ref_ |> Option.value_exn in
+        let type_id, new_t = add_schema ~name ~schema ~components t in
+        type_id, add_ref ~type_id ~ref_ new_t)
     | Or_reference.Value schema ->
       let open Type_structure in
       let jane_with_jsonaf_namespace = "Openapi_runtime.Jane_with_json" in
@@ -333,17 +333,17 @@ module Type_space = struct
               properties
               ~init:(Name.Map.empty, t)
               ~f:(fun ~key ~data:schema (properties_map, t) ->
-              let new_type, t =
-                add_schema ~name:(key ^ "_" ^ name) ~schema ~components t
-              in
-              let new_type, t =
-                if List.mem required key ~equal:String.equal
-                then new_type, t
-                else
-                  Type.create ~name:"option" ~structure:(Optional new_type) ()
-                  |> add_type ~t
-              in
-              Map.add_exn properties_map ~key:(Name.of_raw_string key) ~data:new_type, t)
+                let new_type, t =
+                  add_schema ~name:(key ^ "_" ^ name) ~schema ~components t
+                in
+                let new_type, t =
+                  if List.mem required key ~equal:String.equal
+                  then new_type, t
+                  else
+                    Type.create ~name:"option" ~structure:(Optional new_type) ()
+                    |> add_type ~t
+                in
+                Map.add_exn properties_map ~key:(Name.of_raw_string key) ~data:new_type, t)
           in
           if Map.is_empty properties_map
           then

@@ -15,9 +15,7 @@ let drop_consecutive_underscores str =
   String.to_list str
   |> List.mapi ~f:(fun ind c -> ind, c)
   |> List.filter_map ~f:(fun (ind, ch) ->
-       if ind > 0 && Char.equal ch '_' && Char.equal str.[ind - 1] '_'
-       then None
-       else Some ch)
+    if ind > 0 && Char.equal ch '_' && Char.equal str.[ind - 1] '_' then None else Some ch)
   |> String.of_list
 ;;
 
@@ -30,24 +28,23 @@ let to_snake_case str =
   else
     String.to_list str
     |> List.mapi ~f:(fun index c ->
-         if Char.is_uppercase c && Int.O.(index > 0)
-         then (
-           let c = Char.lowercase c in
-           let preceding_character_is_not_uppercase =
-             let preceding = index - 1 in
-             not (Char.is_uppercase str.[preceding])
-           and following_character_exists_and_is_not_uppercase =
-             let following = index + 1 in
-             Int.O.(following < String.length str)
-             && not (Char.is_uppercase str.[following])
-           in
-           (* Series of uppercase letters should be interpreted as acronyms, and therefore
+      if Char.is_uppercase c && Int.O.(index > 0)
+      then (
+        let c = Char.lowercase c in
+        let preceding_character_is_not_uppercase =
+          let preceding = index - 1 in
+          not (Char.is_uppercase str.[preceding])
+        and following_character_exists_and_is_not_uppercase =
+          let following = index + 1 in
+          Int.O.(following < String.length str) && not (Char.is_uppercase str.[following])
+        in
+        (* Series of uppercase letters should be interpreted as acronyms, and therefore
            grouped in a single word. *)
-           if preceding_character_is_not_uppercase
-              || following_character_exists_and_is_not_uppercase
-           then [ '_'; c ]
-           else [ c ])
-         else [ c ])
+        if preceding_character_is_not_uppercase
+           || following_character_exists_and_is_not_uppercase
+        then [ '_'; c ]
+        else [ c ])
+      else [ c ])
     |> List.concat
     |> String.of_char_list
     |> String.lowercase
@@ -189,5 +186,7 @@ let to_truncated_name { sanitized; _ } =
   then Md5_lib.string sanitized |> Md5_lib.to_hex |> String.append "truncated_"
   else sanitized
 ;;
+
+let filenames_equal a b = String.(to_truncated_name a = to_truncated_name b)
 
 include Comparable.Make (T)
