@@ -234,7 +234,7 @@ let operation_model ~operation ~type_space =
         ])
   in
   let body_module =
-    let%bind.Option body = body in
+    let%bind.Option body in
     match Operation_parameter.type_ body with
     | Type type_id ->
       let reference = type_reference ~type_id ~type_space in

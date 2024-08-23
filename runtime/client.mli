@@ -13,6 +13,8 @@ module Method : sig
     | `TRACE
     | `Other of string
     ]
+
+  include Stringable.S with type t := t
 end
 
 type 'response t =
