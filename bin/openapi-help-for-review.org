@@ -35,6 +35,8 @@
 :   -name STRING               . project name
 :   -out DIR                   . the output directory
 :   -spec FILE                 . a v3.0.3 specfile
+:   [-raise-on-optional-null]  . Use the legacy behavior of raising if an optional
+:                                field contains null
 :   [-help], -?                . print this help text and exit
 
 ** inspect

@@ -26,24 +26,31 @@ let rec type_reference ~type_id ~type_space =
      Some ((Type.name type_ |> Name.to_module_name) ^ ".t")
    | List type_id -> Some (type_reference ~type_id ~type_space ^ " list")
    | Set type_id -> Some (type_reference ~type_id ~type_space ^ " Set.t")
-   | Optional type_id ->
-     Some (type_reference ~type_id ~type_space ^ " option [@jsonaf.option]")
+   | Optional type_id -> Some (type_reference ~type_id ~type_space ^ " option")
    | Nullable type_id -> Some (type_reference ~type_id ~type_space ^ " option")
    | Existing_type -> Some ((Type.name type_ |> Name.to_module_name) ^ ".t")
    | Specific_string _ -> Some "Jane_object_tag.t")
   |> Option.value ~default:"Jsonaf.t"
 ;;
 
+let is_optional ~type_id ~type_space =
+  (let%map.Option type_ = Type_space.type_of_id ~type_id type_space in
+   match Type.structure type_ with
+   | Optional _ -> true
+   | _ -> false)
+  |> Option.value ~default:false
+;;
+
 let env = { Jg_types.std_env with autoescape = false }
 
-let type_definition ~type_id ~type_space =
+let type_definition ~type_id ~type_space ~raise_on_optional_null =
   let%bind.Option type_ = Type_space.type_of_id ~type_id type_space in
   let type_map_to_jingoo type_map =
     Map.mapi type_map ~f:(fun ~key:name ~data:type_id ->
       Tobj
         [ "name", Tstr (Name.to_variable_name name)
         ; "api_name", Tstr (Name.to_raw_string name)
-        ; "optional", Tbool false
+        ; "optional", Tbool (is_optional ~type_id ~type_space)
         ; "type_reference", Tstr (type_reference ~type_id ~type_space)
         ])
     |> Map.to_alist
@@ -76,6 +83,7 @@ let type_definition ~type_id ~type_space =
     let models =
       [ "module_name", Tstr (Type.name type_ |> Name.to_module_name)
       ; "fields", Tlist (type_map_to_jingoo type_map)
+      ; "raise_on_optional_null", Tbool raise_on_optional_null
       ]
     in
     Some (Jg_template.from_string ~env ~models record_definition_dot_jingoo)
@@ -114,7 +122,7 @@ let get_type_names ~type_space =
   Map.to_alist type_space_map
   |> List.map ~f:(fun (type_id, type_) -> type_id, Type.name type_)
   |> List.map ~f:(fun (type_id, type_name) ->
-    type_definition ~type_id ~type_space, type_name)
+    type_definition ~type_id ~type_space ~raise_on_optional_null:true, type_name)
   |> List.filter_map ~f:(fun (type_definition, type_name) ->
     match type_definition with
     | None -> None
@@ -122,12 +130,12 @@ let get_type_names ~type_space =
   |> List.dedup_and_sort ~compare:Name.compare
 ;;
 
-let make_type_mls ~type_space =
+let make_type_mls ~type_space ~raise_on_optional_null =
   let type_space_map = Type_space.to_map type_space in
   Map.to_alist type_space_map
   |> List.map ~f:(fun (type_id, type_) -> type_id, Type.name type_)
   |> List.map ~f:(fun (type_id, type_name) ->
-    type_definition ~type_id ~type_space, type_name)
+    type_definition ~type_id ~type_space ~raise_on_optional_null, type_name)
   |> List.filter_map ~f:(fun (type_definition, type_name) ->
     match type_definition with
     | None -> None
@@ -234,7 +242,7 @@ let operation_model ~operation ~type_space =
         ])
   in
   let body_module =
-    let%bind.Option body = body in
+    let%bind.Option body in
     match Operation_parameter.type_ body with
     | Type type_id ->
       let reference = type_reference ~type_id ~type_space in
@@ -411,7 +419,7 @@ let disambiguate_names (operation_lists, type_space) =
   List.rev new_operation_lists, type_space
 ;;
 
-let make_files ~config ~api ~spec_file =
+let make_files ~config ~api ~spec_file ~raise_on_optional_null =
   let components = Open_api.components api in
   let destination = Config.destination config in
   let files_written = Hash_set.create (module String) in
@@ -447,7 +455,7 @@ let make_files ~config ~api ~spec_file =
       Deferred.return ())
   in
   let%bind.Deferred () =
-    let files_to_write = make_type_mls ~type_space in
+    let files_to_write = make_type_mls ~type_space ~raise_on_optional_null in
     Deferred.List.iter
       ~how:`Sequential
       files_to_write

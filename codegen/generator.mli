@@ -5,7 +5,12 @@ open Openapi_codegen_ir
 open Openapi_codegen_ir.Typify
 
 val type_reference : type_id:Type_id.t -> type_space:Type_space.t -> string
-val type_definition : type_id:Type_id.t -> type_space:Type_space.t -> string option
+
+val type_definition
+  :  type_id:Type_id.t
+  -> type_space:Type_space.t
+  -> raise_on_optional_null:bool
+  -> string option
 
 val make_operation_definition_ml
   :  operation_list:Operation_method.t list
@@ -18,11 +23,16 @@ val make_operation_method_list
   -> components:Components.t
   -> Operation_method.t list * Type_space.t
 
-val make_type_mls : type_space:Type_space.t -> (string * Name.t) list
+val make_type_mls
+  :  type_space:Type_space.t
+  -> raise_on_optional_null:bool
+  -> (string * Name.t) list
+
 val make_jbuild : name:string -> spec_file:string -> paths:Set.M(String).t -> string
 
 val make_files
   :  config:Config.t
   -> api:Open_api.t
   -> spec_file:string
+  -> raise_on_optional_null:bool
   -> unit Deferred.Or_error.t

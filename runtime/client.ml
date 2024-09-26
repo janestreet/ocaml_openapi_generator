@@ -13,6 +13,32 @@ module Method = struct
     | `TRACE
     | `Other of string
     ]
+
+  let of_string s =
+    match String.uppercase s with
+    | "GET" -> `GET
+    | "HEAD" -> `HEAD
+    | "POST" -> `POST
+    | "PUT" -> `PUT
+    | "DELETE" -> `DELETE
+    | "CONNECT" -> `CONNECT
+    | "OPTIONS" -> `OPTIONS
+    | "TRACE" -> `TRACE
+    | http_method -> `Other http_method
+  ;;
+
+  let to_string t =
+    match t with
+    | `GET -> "GET"
+    | `HEAD -> "HEAD"
+    | `POST -> "POST"
+    | `PUT -> "PUT"
+    | `DELETE -> "DELETE"
+    | `CONNECT -> "CONNECT"
+    | `OPTIONS -> "OPTIONS"
+    | `TRACE -> "TRACE"
+    | `Other s -> s
+  ;;
 end
 
 type 'response t =

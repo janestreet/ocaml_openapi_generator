@@ -11,9 +11,19 @@ let command =
         flag "spec" (required Filename_unix.arg_type) ~doc:"FILE a v3.0.3 specfile"
       and destination =
         flag "out" (required Filename_unix.arg_type) ~doc:"DIR the output directory"
-      and name = flag "name" (required string) ~doc:"STRING project name" in
+      and name = flag "name" (required string) ~doc:"STRING project name"
+      and raise_on_optional_null =
+        flag
+          "raise-on-optional-null"
+          no_arg
+          ~doc:"Use the legacy behavior of raising if an optional field contains null"
+      in
       let config = Openapi_codegen.Config.create ~name ~destination in
       fun () ->
         let%bind api = read_specfile ~file:spec_file in
-        Openapi_codegen.Generator.make_files ~config ~api ~spec_file]
+        Openapi_codegen.Generator.make_files
+          ~config
+          ~api
+          ~spec_file
+          ~raise_on_optional_null]
 ;;
