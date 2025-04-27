@@ -20,10 +20,9 @@ depends: [
   "ocaml-embed-file"
   "ppx_jane"
   "ppx_jsonaf_conv"
-  "dune"             {>= "3.11.0"}
+  "dune"             {>= "3.17.0"}
   "httpaf"           {>= "0.7.1"}
   "jingoo"           {>= "1.4.4" & < "1.5.0"}
-  "uri"              {>= "3.0.0"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "An OpenAPI 3 to OCaml client generator."
