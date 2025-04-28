@@ -17,12 +17,18 @@ module Method : sig
   include Stringable.S with type t := t
 end
 
-type 'response t =
-  { base_url : string
-  ; headers : (string * string) list
-  ; secure : bool
-  ; make_request :
-      ?body:string -> 'response t -> Uri.t -> Method.t -> 'response Deferred.Or_error.t
-  ; response_to_string : 'response -> string
+module Params : sig
+  type t =
+    { path : string
+    ; query : (string * string list) list
+    ; method_ : Method.t
+    ; body : string option
+    }
+end
+
+type ('response, 'metadata) t =
+  { metadata : 'metadata
+  ; make_request : 'metadata -> Params.t -> 'response Deferred.Or_error.t
+  ; response_to_jsonaf : 'response -> Jsonaf.t Or_error.t
   }
 [@@deriving fields ~getters]
