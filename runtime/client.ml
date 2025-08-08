@@ -13,6 +13,7 @@ module Method = struct
     | `TRACE
     | `Other of string
     ]
+  [@@deriving sexp, equal]
 
   let of_string s =
     match String.uppercase s with
@@ -48,6 +49,7 @@ module Params = struct
     ; method_ : Method.t
     ; body : string option
     }
+  [@@deriving sexp, equal]
 end
 
 type ('response, 'metadata) t =

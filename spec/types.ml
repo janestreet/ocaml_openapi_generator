@@ -79,12 +79,12 @@ module Info = struct
   type t =
     { title : string
     ; description : string option [@jsonaf.option]
-    ; terms_of_service : string option [@jsonaf.option] [@key "termsOfService"]
+    ; terms_of_service : string option [@jsonaf.option]
     ; contact : Contact.t option [@jsonaf.option]
     ; license : License.t option [@jsonaf.option]
     ; version : string
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 module Server_variable = struct
@@ -117,10 +117,9 @@ module Tag = struct
   type t =
     { name : string
     ; description : string option [@jsonaf.option]
-    ; external_docs : External_documentation.t option
-         [@jsonaf.option] [@key "externalDocs"]
+    ; external_docs : External_documentation.t option [@jsonaf.option]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 module Security_requirement = struct
@@ -132,29 +131,29 @@ module Example = struct
     { summary : string option [@jsonaf.option]
     ; description : string option [@jsonaf.option]
     ; value : Jsonaf.t option [@jsonaf.option]
-    ; external_value : string option [@jsonaf.option] [@key "externalValue"]
+    ; external_value : string option [@jsonaf.option]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 module Link = struct
   type t =
-    { operation_ref : string option [@jsonaf.option] [@key "operationRef"]
-    ; operation_id : string option [@jsonaf.option] [@key "operationId"]
+    { operation_ref : string option [@jsonaf.option]
+    ; operation_id : string option [@jsonaf.option]
     ; parameters : Jsonaf.t Jsonaf_string_map.t [@default Jsonaf_string_map.empty]
-    ; request_body : Jsonaf.t option [@jsonaf.option] [@key "requestBody"]
+    ; request_body : Jsonaf.t option [@jsonaf.option]
     ; description : string option [@jsonaf.option]
     ; server : Server.t option [@jsonaf.option]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 module Discriminator = struct
   type t =
-    { property_name : string [@key "propertyName"]
+    { property_name : string
     ; mapping : string Jsonaf_string_map.t [@default Jsonaf_string_map.empty]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 module XML = struct
@@ -171,44 +170,42 @@ end
 module Schema = struct
   type t =
     { title : string option [@jsonaf.option]
-    ; multiple_of : float option [@jsonaf.option] [@key "multipleOf"]
+    ; multiple_of : float option [@jsonaf.option]
     ; maximum : float option [@jsonaf.option]
-    ; exclusive_maximum : bool option [@jsonaf.option] [@key "exclusiveMaximum"]
+    ; exclusive_maximum : bool option [@jsonaf.option]
     ; minimum : float option [@jsonaf.option]
-    ; exclusive_minimum : bool option [@jsonaf.option] [@key "exclusiveMinimum"]
-    ; max_length : int option [@jsonaf.option] [@key "maxLength"]
-    ; min_length : int option [@jsonaf.option] [@key "minLength"]
+    ; exclusive_minimum : bool option [@jsonaf.option]
+    ; max_length : int option [@jsonaf.option]
+    ; min_length : int option [@jsonaf.option]
     ; pattern : string option [@jsonaf.option]
-    ; max_items : int option [@jsonaf.option] [@key "maxItems"]
-    ; min_items : int option [@jsonaf.option] [@key "minItems"]
-    ; unique_items : bool [@default false] [@key "uniqueItems"]
-    ; max_properties : int option [@jsonaf.option] [@key "maxProperties"]
-    ; min_properties : int option [@jsonaf.option] [@key "minProperties"]
+    ; max_items : int option [@jsonaf.option]
+    ; min_items : int option [@jsonaf.option]
+    ; unique_items : bool [@default false]
+    ; max_properties : int option [@jsonaf.option]
+    ; min_properties : int option [@jsonaf.option]
     ; required : string list [@default []]
     ; enum : Jsonaf.t list option [@jsonaf.option]
     ; type_ : string option [@jsonaf.option] [@key "type"]
-    ; all_of : t Or_reference.t list option [@jsonaf.option] [@key "allOf"]
-    ; one_of : t Or_reference.t list option [@jsonaf.option] [@key "oneOf"]
-    ; any_of : t Or_reference.t list option [@jsonaf.option] [@key "anyOf"]
+    ; all_of : t Or_reference.t list option [@jsonaf.option]
+    ; one_of : t Or_reference.t list option [@jsonaf.option]
+    ; any_of : t Or_reference.t list option [@jsonaf.option]
     ; not_ : t Or_reference.t option [@jsonaf.option] [@key "not"]
     ; items : t Or_reference.t option [@jsonaf.option]
     ; properties : t Or_reference.t Jsonaf_string_map.t option [@jsonaf.option]
-    ; additional_properties : Jsonaf.t option
-         [@jsonaf.option] [@key "additionalProperties"]
+    ; additional_properties : Jsonaf.t option [@jsonaf.option]
     ; description : string option [@jsonaf.option]
     ; format : string option [@jsonaf.option]
     ; default : Jsonaf.t option [@jsonaf.option]
     ; nullable : bool [@default false]
     ; discriminator : Discriminator.t option [@jsonaf.option]
-    ; read_only : bool [@default false] [@key "readOnly"]
-    ; write_only : bool [@default false] [@key "writeOnly"]
+    ; read_only : bool [@default false]
+    ; write_only : bool [@default false]
     ; xml : XML.t option [@jsonaf.option]
-    ; external_docs : External_documentation.t option
-         [@jsonaf.option] [@key "externalDocs"]
+    ; external_docs : External_documentation.t option [@jsonaf.option]
     ; example : Jsonaf.t option [@jsonaf.option]
     ; deprecated : bool [@default false]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
   [@@jsonaf.allow_extra_fields]
 end
 
@@ -232,16 +229,16 @@ end = struct
     { description : string option [@jsonaf.option]
     ; required : bool [@default false]
     ; deprecated : bool [@default false]
-    ; allow_empty_value : bool [@default false] [@key "allowEmptyValue"]
+    ; allow_empty_value : bool [@default false]
     ; style : string option [@jsonaf.option]
     ; explode : bool option [@jsonaf.option]
-    ; allow_reserved : bool [@default false] [@key "allowReserved"]
+    ; allow_reserved : bool [@default false]
     ; schema : Schema.t Or_reference.t option [@jsonaf.option]
     ; example : Jsonaf.t option [@jsonaf.option]
     ; examples : Example.t Jsonaf_string_map.t [@default Jsonaf_string_map.empty]
     ; content : Media_type.t Jsonaf_string_map.t [@default Jsonaf_string_map.empty]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 and Encoding : sig
@@ -255,14 +252,14 @@ and Encoding : sig
   [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
 end = struct
   type t =
-    { content_type : string option [@jsonaf.option] [@key "contentType"]
+    { content_type : string option [@jsonaf.option]
     ; headers : Header.t Or_reference.t Jsonaf_string_map.t
          [@default Jsonaf_string_map.empty]
     ; style : string option [@jsonaf.option]
     ; explode : bool option [@jsonaf.option]
-    ; allow_reserved : bool [@default false] [@key "allowReserved"]
+    ; allow_reserved : bool [@default false]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 and Media_type : sig
@@ -306,11 +303,11 @@ module Parameter = struct
 
   module Query_style = struct
     type t =
-      | Form [@name "form"]
-      | Space_delimited [@name "spaceDelimited"]
-      | Pipe_delimited [@name "pipeDelimited"]
-      | Deep_object [@name "deepObject"]
-    [@@deriving jsonaf]
+      | Form
+      | Space_delimited
+      | Pipe_delimited
+      | Deep_object
+    [@@deriving jsonaf ~capitalize:"camelCase"]
 
     let jsonaf_of_t = function
       | Form -> `String "form"
@@ -481,12 +478,10 @@ end = struct
     { tags : string list [@default []]
     ; summary : string option [@jsonaf.option]
     ; description : string option [@jsonaf.option]
-    ; external_docs : External_documentation.t option
-         [@jsonaf.option] [@key "externalDocs"]
-    ; operation_id : string option [@jsonaf.option] [@key "operationId"]
+    ; external_docs : External_documentation.t option [@jsonaf.option]
+    ; operation_id : string option [@jsonaf.option]
     ; parameters : Parameter.t Or_reference.t list [@default []]
-    ; request_body : Request_body.t Or_reference.t option
-         [@jsonaf.option] [@key "requestBody"]
+    ; request_body : Request_body.t Or_reference.t option [@jsonaf.option]
     ; responses : Responses.t
     ; callbacks : Callback.t Or_reference.t Jsonaf_string_map.t
          [@default Jsonaf_string_map.empty]
@@ -494,7 +489,7 @@ end = struct
     ; security : Security_requirement.t list option [@jsonaf.option]
     ; servers : Server.t list [@default []]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
   [@@jsonaf.allow_extra_fields]
 end
 
@@ -566,22 +561,22 @@ end
 
 module Oauth_flow = struct
   type t =
-    { authorization_url : string option [@jsonaf.option] [@key "authorizationUrl"]
-    ; token_url : string option [@jsonaf.option] [@key "tokenUrl"]
-    ; refresh_url : string option [@jsonaf.option] [@key "refreshUrl"]
+    { authorization_url : string option [@jsonaf.option]
+    ; token_url : string option [@jsonaf.option]
+    ; refresh_url : string option [@jsonaf.option]
     ; scopes : string Jsonaf_string_map.t
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 module Oauth_flows = struct
   type t =
     { implicit : Oauth_flow.t option [@jsonaf.option]
     ; password : Oauth_flow.t option [@jsonaf.option]
-    ; client_credentials : Oauth_flow.t option [@jsonaf.option] [@key "clientCredentials"]
-    ; authorization_code : Oauth_flow.t option [@jsonaf.option] [@key "authorizationCode"]
+    ; client_credentials : Oauth_flow.t option [@jsonaf.option]
+    ; authorization_code : Oauth_flow.t option [@jsonaf.option]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 module Security_scheme = struct
@@ -591,11 +586,11 @@ module Security_scheme = struct
     ; name : string option [@jsonaf.option]
     ; in_ : string option [@key "in"] [@jsonaf.option]
     ; scheme : string option [@jsonaf.option]
-    ; bearer_format : string option [@jsonaf.option] [@key "bearerFormat"]
+    ; bearer_format : string option [@jsonaf.option]
     ; flows : Oauth_flows.t option [@jsonaf.option]
-    ; open_id_connect_url : string option [@jsonaf.option] [@key "openIdConnectUrl"]
+    ; open_id_connect_url : string option [@jsonaf.option]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 module Components = struct
@@ -609,16 +604,16 @@ module Components = struct
     ; examples : Example.t Or_reference.t Jsonaf_string_map.t
          [@default Jsonaf_string_map.empty]
     ; request_bodies : Request_body.t Or_reference.t Jsonaf_string_map.t
-         [@key "requestBodies"] [@default Jsonaf_string_map.empty]
+         [@default Jsonaf_string_map.empty]
     ; headers : Header.t Or_reference.t Jsonaf_string_map.t
          [@default Jsonaf_string_map.empty]
     ; security_schemes : Security_scheme.t Or_reference.t Jsonaf_string_map.t
-         [@key "securitySchemes"] [@default Jsonaf_string_map.empty]
+         [@default Jsonaf_string_map.empty]
     ; links : Link.t Or_reference.t Jsonaf_string_map.t [@default Jsonaf_string_map.empty]
     ; callbacks : Callback.t Or_reference.t Jsonaf_string_map.t
          [@default Jsonaf_string_map.empty]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
 module Open_api = struct
@@ -630,8 +625,7 @@ module Open_api = struct
     ; components : Components.t [@default Components.t_of_jsonaf (Jsonaf.of_string "{}")]
     ; security : Security_requirement.t list option [@jsonaf.option]
     ; tags : Tag.t list option [@jsonaf.option]
-    ; external_docs : External_documentation.t option
-         [@jsonaf.option] [@key "externalDocs"]
+    ; external_docs : External_documentation.t option [@jsonaf.option]
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end

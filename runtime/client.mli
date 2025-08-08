@@ -13,6 +13,7 @@ module Method : sig
     | `TRACE
     | `Other of string
     ]
+  [@@deriving sexp, equal]
 
   include Stringable.S with type t := t
 end
@@ -24,6 +25,7 @@ module Params : sig
     ; method_ : Method.t
     ; body : string option
     }
+  [@@deriving sexp, equal]
 end
 
 type ('response, 'metadata) t =
