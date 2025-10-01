@@ -61,6 +61,8 @@ let {{ operation.operation_id }}
   {% if operation.has_response -%}
   let%bind response = t.response_to_jsonaf response |> Deferred.return in
   Monitor.try_with_or_error (fun () -> Deferred.return ({{ operation.response_module }}.t_of_jsonaf response))
+  {%- elif operation.has_raw_response -%}
+  t.response_to_bytes response |> Deferred.return
   {%- else -%}
   ignore response;
   Deferred.Or_error.ok_unit

@@ -43,7 +43,12 @@ let is_optional ~type_id ~type_space =
 
 let env = { Jg_types.std_env with autoescape = false }
 
-let type_definition ~type_id ~type_space ~raise_on_optional_null =
+let type_definition
+  ~type_id
+  ~type_space
+  ~raise_on_optional_null
+  ~include_unknown_fallback_for_enums
+  =
   let%bind.Option type_ = Type_space.type_of_id ~type_id type_space in
   let type_map_to_jingoo type_map =
     Map.mapi type_map ~f:(fun ~key:name ~data:type_id ->
@@ -91,6 +96,7 @@ let type_definition ~type_id ~type_space ~raise_on_optional_null =
     let models =
       [ "module_name", Tstr (Type.name type_ |> Name.to_module_name)
       ; "variants", Tlist (type_list_to_jingoo type_list |> Option.value ~default:[])
+      ; "include_unknown", Tbool include_unknown_fallback_for_enums
       ]
     in
     Some (Jg_template.from_string ~env ~models variant_definition_dot_jingoo)
@@ -122,7 +128,12 @@ let get_type_names ~type_space =
   Map.to_alist type_space_map
   |> List.map ~f:(fun (type_id, type_) -> type_id, Type.name type_)
   |> List.map ~f:(fun (type_id, type_name) ->
-    type_definition ~type_id ~type_space ~raise_on_optional_null:true, type_name)
+    ( type_definition
+        ~type_id
+        ~type_space
+        ~raise_on_optional_null:true
+        ~include_unknown_fallback_for_enums:false
+    , type_name ))
   |> List.filter_map ~f:(fun (type_definition, type_name) ->
     match type_definition with
     | None -> None
@@ -130,12 +141,17 @@ let get_type_names ~type_space =
   |> List.dedup_and_sort ~compare:Name.compare
 ;;
 
-let make_type_mls ~type_space ~raise_on_optional_null =
+let make_type_mls ~type_space ~raise_on_optional_null ~include_unknown_fallback_for_enums =
   let type_space_map = Type_space.to_map type_space in
   Map.to_alist type_space_map
   |> List.map ~f:(fun (type_id, type_) -> type_id, Type.name type_)
   |> List.map ~f:(fun (type_id, type_name) ->
-    type_definition ~type_id ~type_space ~raise_on_optional_null, type_name)
+    ( type_definition
+        ~type_id
+        ~type_space
+        ~raise_on_optional_null
+        ~include_unknown_fallback_for_enums
+    , type_name ))
   |> List.filter_map ~f:(fun (type_definition, type_name) ->
     match type_definition with
     | None -> None
@@ -256,10 +272,12 @@ let operation_model ~operation ~type_space =
     Operation_response.get_default (Operation_method.responses operation)
     |> Option.value_exn
   in
-  let response_module =
+  let response_module, is_raw_response =
     match Operation_response.type_id operation_response with
-    | Resolved type_id -> type_reference ~type_id ~type_space |> module_path_of_type
-    | _ -> None
+    | Resolved type_id ->
+      type_reference ~type_id ~type_space |> module_path_of_type, false
+    | Raw -> None, true
+    | _ -> None, false
   in
   [ "operation_id", Tstr operation_id
   ; "operation_path", Tstr operation_path
@@ -267,6 +285,7 @@ let operation_model ~operation ~type_space =
   ; "body_module", Tstr (body_module |> Option.value ~default:"Jsonaf")
   ; "endpoint_method", Tstr (method_to_ocaml operation_method)
   ; "has_response", Tbool (Option.is_some response_module)
+  ; "has_raw_response", Tbool is_raw_response
   ; "response_module", Tstr (response_module |> Option.value ~default:"")
   ; "path_parameters", Tlist path_parameters
   ; "query_parameters", Tlist query_parameters
@@ -419,7 +438,13 @@ let disambiguate_names (operation_lists, type_space) =
   List.rev new_operation_lists, type_space
 ;;
 
-let make_files ~config ~api ~spec_file ~raise_on_optional_null =
+let make_files
+  ~config
+  ~api
+  ~spec_file
+  ~raise_on_optional_null
+  ~include_unknown_fallback_for_enums
+  =
   let components = Open_api.components api in
   let destination = Config.destination config in
   let files_written = Hash_set.create (module String) in
@@ -455,7 +480,12 @@ let make_files ~config ~api ~spec_file ~raise_on_optional_null =
       Deferred.return ())
   in
   let%bind.Deferred () =
-    let files_to_write = make_type_mls ~type_space ~raise_on_optional_null in
+    let files_to_write =
+      make_type_mls
+        ~type_space
+        ~raise_on_optional_null
+        ~include_unknown_fallback_for_enums
+    in
     Deferred.List.iter
       ~how:`Sequential
       files_to_write

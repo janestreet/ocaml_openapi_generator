@@ -35,6 +35,9 @@
 :   -name STRING               . project name
 :   -out DIR                   . the output directory
 :   -spec FILE                 . a v3.0.3 specfile
+:   [-include-unknown-fallback-for-enums]
+:                              . Include an unknown fallback for enums instead of
+:                                raising if an unexpected value is found
 :   [-raise-on-optional-null]  . Use the legacy behavior of raising if an optional
 :                                field contains null
 :   [-help], -?                . print this help text and exit

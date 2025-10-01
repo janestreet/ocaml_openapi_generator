@@ -13,6 +13,7 @@ module Method = struct
     | `TRACE
     | `Other of string
     ]
+  [@@deriving sexp, equal]
 
   let of_string s =
     match String.uppercase s with
@@ -48,11 +49,20 @@ module Params = struct
     ; method_ : Method.t
     ; body : string option
     }
+  [@@deriving sexp, equal]
+end
+
+module Content_type_and_bytes = struct
+  type t =
+    { content_type : string option
+    ; bytes : string
+    }
 end
 
 type ('response, 'metadata) t =
   { metadata : 'metadata
   ; make_request : 'metadata -> Params.t -> 'response Deferred.Or_error.t
   ; response_to_jsonaf : 'response -> Jsonaf.t Or_error.t
+  ; response_to_bytes : 'response -> Content_type_and_bytes.t Or_error.t
   }
 [@@deriving fields ~getters]

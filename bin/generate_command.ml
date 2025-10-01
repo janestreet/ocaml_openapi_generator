@@ -17,6 +17,13 @@ let command =
           "raise-on-optional-null"
           no_arg
           ~doc:"Use the legacy behavior of raising if an optional field contains null"
+      and include_unknown_fallback_for_enums =
+        flag
+          "include-unknown-fallback-for-enums"
+          no_arg
+          ~doc:
+            "Include an unknown fallback for enums instead of raising if an unexpected \
+             value is found"
       in
       let config = Openapi_codegen.Config.create ~name ~destination in
       fun () ->
@@ -25,5 +32,6 @@ let command =
           ~config
           ~api
           ~spec_file
-          ~raise_on_optional_null]
+          ~raise_on_optional_null
+          ~include_unknown_fallback_for_enums]
 ;;

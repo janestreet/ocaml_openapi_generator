@@ -215,6 +215,15 @@ and Encoding : sig
   [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
 end
 
+and Media_type_or_server_sent_event : sig
+  type t =
+    | Server_sent_event of Media_type.t
+    | Media_type of Media_type.t
+  [@@deriving jsonaf]
+
+  val media_type : t -> Media_type.t
+end
+
 and Media_type : sig
   type t =
     { schema : Schema.t Or_reference.t option
@@ -304,7 +313,7 @@ module Response : sig
   type t =
     { description : string
     ; headers : Header.t Or_reference.t Jsonaf_string_map.t
-    ; content : Media_type.t Jsonaf_string_map.t
+    ; content : Media_type_or_server_sent_event.t Jsonaf_string_map.t
     ; links : Link.t Or_reference.t Jsonaf_string_map.t
     }
   [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
