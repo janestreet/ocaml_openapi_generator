@@ -4,6 +4,8 @@ let option_of_sexp = Core.option_of_sexp
 let sexp_of_option = Core.sexp_of_option
 let list_of_sexp = Core.list_of_sexp
 let sexp_of_list = Core.sexp_of_list
+let string_of_sexp = Core.string_of_sexp
+let sexp_of_string = Core.sexp_of_string
 
 {% autoescape false -%}
 {{ module }}

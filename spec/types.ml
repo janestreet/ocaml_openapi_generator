@@ -262,6 +262,39 @@ end = struct
   [@@deriving jsonaf ~capitalize:"camelCase", fields ~getters ~setters ~iterators:create]
 end
 
+and Media_type_or_server_sent_event : sig
+  type t =
+    | Server_sent_event of Media_type.t
+    | Media_type of Media_type.t
+  [@@deriving jsonaf]
+
+  val media_type : t -> Media_type.t
+end = struct
+  type t =
+    | Server_sent_event of Media_type.t
+    | Media_type of Media_type.t
+
+  let media_type = function
+    | Server_sent_event media_type | Media_type media_type -> media_type
+  ;;
+
+  let t_of_jsonaf jsonaf =
+    try Media_type ([%of_jsonaf: Media_type.t] jsonaf) with
+    | _exn ->
+      (match [%of_jsonaf: Media_type.t Jsonaf_string_map.t] jsonaf |> Map.to_alist with
+       | [ ("x-server-sent-event", event) ] -> Server_sent_event event
+       | _ ->
+         raise_s [%message "Couldn't parse as media type or event" (jsonaf : Jsonaf.t)])
+  ;;
+
+  let jsonaf_of_t = function
+    | Media_type media_type -> [%jsonaf_of: Media_type.t] media_type
+    | Server_sent_event media_type ->
+      Map.singleton (module String) "x-server-sent-event" media_type
+      |> [%jsonaf_of: Media_type.t Jsonaf_string_map.t]
+  ;;
+end
+
 and Media_type : sig
   type t =
     { schema : Schema.t Or_reference.t option
@@ -447,7 +480,8 @@ module Response = struct
     { description : string
     ; headers : Header.t Or_reference.t Jsonaf_string_map.t
          [@default Jsonaf_string_map.empty]
-    ; content : Media_type.t Jsonaf_string_map.t [@default Jsonaf_string_map.empty]
+    ; content : Media_type_or_server_sent_event.t Jsonaf_string_map.t
+         [@default Jsonaf_string_map.empty]
     ; links : Link.t Or_reference.t Jsonaf_string_map.t [@default Jsonaf_string_map.empty]
     }
   [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]

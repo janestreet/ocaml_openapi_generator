@@ -1,16 +1,20 @@
 {%- autoescape false -%}
 type t =
   {% for variant in variants %}| {{ variant.name }}
-  {% endfor %} [@@deriving sexp]
+  {% endfor %}{% if include_unknown %}| Unknown of string
+  {% endif %}[@@deriving sexp]
 
 let jsonaf_of_t = function
   {% for variant in variants %}| {{ variant.name }} -> {{ variant.ocaml }}
   {% endfor -%}
+  {% if include_unknown %}| Unknown unknown -> `String unknown{% endif %}
 ;;
 
 let t_of_jsonaf = function
   {% for variant in variants %}| {{ variant.ocaml }} -> {{ variant.name }}
   {% endfor -%}
-  | _ -> failwith {|unable to parse {{ module_name }}|}
+  {% if include_unknown %}| `String unknown -> Unknown unknown 
+  {% else %}| `String unknown -> Core.failwithf {|unable to parse {{ module_name }}: unexpected value "%s"|} unknown ()
+  {% endif %}| _ -> failwith {|unable to parse {{ module_name }}|}
 ;;
 {%- endautoescape -%}

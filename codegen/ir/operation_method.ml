@@ -105,12 +105,47 @@ let make_response_list ~operation ~components ~type_space =
             let status = Operation_response_status.of_string status in
             let%bind type_, type_space =
               let media_types = Response.content response in
-              let%bind media_type = Map.find media_types "application/json" in
-              let%map schema = Media_type.schema media_type in
-              let type_id, type_space =
-                Type_space.add_schema ~schema ~components type_space
+              let non_binary_type =
+                let%bind media_type =
+                  Option.first_some
+                    (Map.find media_types "application/ld+json")
+                    (Map.find media_types "application/json")
+                in
+                let%map schema =
+                  media_type
+                  |> Media_type_or_server_sent_event.media_type
+                  |> Media_type.schema
+                in
+                let type_id, type_space =
+                  Type_space.add_schema ~schema ~components type_space
+                in
+                Resolved type_id, type_space
               in
-              Resolved type_id, type_space
+              let binary_type =
+                let binary_content_types =
+                  [ "application/pdf"
+                  ; "application/octet-stream"
+                  ; "application/zip"
+                  ; "image/png"
+                  ; "image/jpeg"
+                  ; "image/gif"
+                  ; "application/vnd.ms-excel"
+                  ; "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  ; "application/msword"
+                  ; "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  ; "text/csv" (* CSV files should also be returned as bytes *)
+                  ; "text/plain" (* Plain text files might also need byte handling *)
+                  ]
+                in
+                let is_binary_type =
+                  List.exists binary_content_types ~f:(fun content_type ->
+                    Map.mem media_types content_type)
+                in
+                Option.some_if is_binary_type (Raw, type_space)
+              in
+              (* We arbitrarily choose the non-binary type first to preserve existing
+                 behaviour. *)
+              Option.first_some non_binary_type binary_type
             in
             Some (lst @ [ status, type_ ], type_space))
            |> Option.value ~default:(lst, type_space))
