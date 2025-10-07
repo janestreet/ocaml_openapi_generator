@@ -5,6 +5,43 @@ open! Openapi_runtime.Jane_with_json
 open! Openapi_runtime.Client
 open! Jsonaf.Export
 
+module Params = struct
+{% for operation in operations -%}
+  let {{ operation.operation_id }}
+      {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
+      {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
+      {% if operation.has_body %}~body{%- endif %}
+      ()
+      =
+    let query =
+      List.filter_opt
+        [{% for param in operation.query_parameters %}
+         {% if param.is_required -%}
+           Some ({{ param.to_query_parameter }} ~key:{|{{ param.api_name }}|} ~value:{{ param.name }})
+         {%- else -%}
+           Option.map {{ param.name }} ~f:(fun value -> {{ param.to_query_parameter }} ~key:{|{{ param.api_name }}|} ~value)
+         {%- endif %};
+         {% endfor %}]
+      |> List.concat_map
+        ~f:Openapi_runtime.Query_parameters.to_list
+    in
+    let path_template = Openapi_runtime.Path_template.t_of_sexp (Sexp.of_string {|{{ operation.operation_path }}|}) in
+    let%map.Or_error path =
+      Openapi_runtime.Path_template.render_path
+      ~parameters:(String.Map.of_alist_exn [{% for param in operation.path_parameters %}{|{{ param.api_name }}|}, {{ param.name }};{% endfor %}])
+      path_template
+      |> Result.of_option ~error:(Core.Error.of_string {|unable to render path|})
+    in
+    let body = {% if operation.has_body %}Some (Jsonaf.to_string ({{ operation.body_module }}.jsonaf_of_t body)){% else %}None{% endif %} in
+    { Params.path
+    ; query
+    ; body
+    ; method_ = {{ operation.endpoint_method }}
+    }
+  ;;
+  {% endfor %}
+end
+
 {% for operation in operations -%}
 let {{ operation.operation_id }}
     {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
@@ -12,37 +49,20 @@ let {{ operation.operation_id }}
     {% if operation.has_body %}~body{%- endif %}
     t
     =
-  let query_parameters =
-    List.filter_opt
-      [{% for param in operation.query_parameters %}
-       {% if param.is_required -%}
-         Some ({{ param.to_query_parameter }} ~key:{|{{ param.api_name }}|} ~value:{{ param.name }})
-       {%- else -%}
-         Option.map {{ param.name }} ~f:(fun value -> {{ param.to_query_parameter }} ~key:{|{{ param.api_name }}|} ~value)
-       {%- endif %};
-       {% endfor %}]
-    |> List.concat_map
-      ~f:Openapi_runtime.Query_parameters.to_list
-  in
-  let path_template = Openapi_runtime.Path_template.t_of_sexp (Sexp.of_string {|{{ operation.operation_path }}|}) in
-  let%bind path =
-    Openapi_runtime.Path_template.render_path
-    ~parameters:(String.Map.of_alist_exn [{% for param in operation.path_parameters %}{|{{ param.api_name }}|}, {{ param.name }};{% endfor %}])
-    path_template
-    |> Result.of_option ~error:(Core.Error.of_string {|unable to render path|})
+  let%bind params =
+    Params.{{ operation.operation_id }}
+    {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
+    {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
+    {% if operation.has_body %}~body{%- endif %}
+    ()
     |> Deferred.return
   in
-  let url = Uri.of_string (t.base_url ^ path) in
-  let url = Uri.add_query_params url query_parameters in
-  let%bind response =
-    t.make_request
-      ?body:{% if operation.has_body %}(Some (Jsonaf.to_string ({{ operation.body_module }}.jsonaf_of_t body))){% else %}None{% endif %}
-      t
-      url
-      {{ operation.endpoint_method }}
-  in
+  let%bind response = t.make_request t.metadata params in
   {% if operation.has_response -%}
-  Monitor.try_with_or_error (fun () -> Deferred.return ({{ operation.response_module }}.t_of_jsonaf (Jsonaf.of_string (t.response_to_string response))))
+  let%bind response = t.response_to_jsonaf response |> Deferred.return in
+  Monitor.try_with_or_error (fun () -> Deferred.return ({{ operation.response_module }}.t_of_jsonaf response))
+  {%- elif operation.has_raw_response -%}
+  t.response_to_bytes response |> Deferred.return
   {%- else -%}
   ignore response;
   Deferred.Or_error.ok_unit

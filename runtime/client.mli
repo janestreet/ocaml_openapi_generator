@@ -13,16 +13,32 @@ module Method : sig
     | `TRACE
     | `Other of string
     ]
+  [@@deriving sexp, equal]
 
   include Stringable.S with type t := t
 end
 
-type 'response t =
-  { base_url : string
-  ; headers : (string * string) list
-  ; secure : bool
-  ; make_request :
-      ?body:string -> 'response t -> Uri.t -> Method.t -> 'response Deferred.Or_error.t
-  ; response_to_string : 'response -> string
+module Params : sig
+  type t =
+    { path : string
+    ; query : (string * string list) list
+    ; method_ : Method.t
+    ; body : string option
+    }
+  [@@deriving sexp, equal]
+end
+
+module Content_type_and_bytes : sig
+  type t =
+    { content_type : string option
+    ; bytes : string
+    }
+end
+
+type ('response, 'metadata) t =
+  { metadata : 'metadata
+  ; make_request : 'metadata -> Params.t -> 'response Deferred.Or_error.t
+  ; response_to_jsonaf : 'response -> Jsonaf.t Or_error.t
+  ; response_to_bytes : 'response -> Content_type_and_bytes.t Or_error.t
   }
 [@@deriving fields ~getters]
