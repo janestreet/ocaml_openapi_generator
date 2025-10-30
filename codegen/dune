@@ -1,7 +1,7 @@
 (library
  (name openapi_codegen)
- (libraries core async httpaf jsonaf openapi_spec openapi_codegen_ir
-   openapi_runtime jingoo)
+ (libraries async core httpaf jingoo jsonaf openapi_codegen_ir
+   openapi_runtime openapi_spec)
  (preprocess
   (pps ppx_jane ppx_jsonaf_conv)))
 

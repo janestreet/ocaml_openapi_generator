@@ -1,6 +1,6 @@
 (library
  (name openapi_spec)
  (public_name ocaml_openapi_generator.openapi_spec)
- (libraries core async httpaf jsonaf jsonaf.kernel)
+ (libraries async core httpaf jsonaf jsonaf.kernel)
  (preprocess
   (pps ppx_jane ppx_jsonaf_conv)))
