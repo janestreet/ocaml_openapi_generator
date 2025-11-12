@@ -1,5 +1,5 @@
 (library
  (name openapi_codegen_ir)
- (libraries core async httpaf jsonaf openapi_spec base.md5 openapi_runtime)
+ (libraries async core httpaf jsonaf base.md5 openapi_runtime openapi_spec)
  (preprocess
   (pps ppx_jane ppx_jsonaf_conv)))

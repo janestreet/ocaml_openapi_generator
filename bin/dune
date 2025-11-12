@@ -2,7 +2,7 @@
  (modes byte exe)
  (names openapi)
  (public_names ocaml-openapi-generator)
- (libraries core async jsonaf core_unix.command_unix openapi_spec
-   openapi_codegen openapi_codegen_ir core_unix.filename_unix httpaf)
+ (libraries async core_unix.command_unix core core_unix.filename_unix httpaf
+   jsonaf openapi_codegen openapi_codegen_ir openapi_spec)
  (preprocess
   (pps ppx_jane ppx_jsonaf_conv)))
