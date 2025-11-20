@@ -44,8 +44,8 @@ let infer_operation_id ~path ~http_method =
 
 let make_parameter_list ~path_parameters ~components ~operation_id ~type_space ~operation =
   (* External parameters are defined on the path itself (i.e. are valid for all HTTP
-     methods done on the same path). They can be overridden by internal parameters,
-     which are defined on the specific operation. *)
+     methods done on the same path). They can be overridden by internal parameters, which
+     are defined on the specific operation. *)
   let external_parameters = resolve_all_parameters ~components path_parameters in
   let internal_parameters =
     resolve_all_parameters ~components (Operation.parameters operation)
