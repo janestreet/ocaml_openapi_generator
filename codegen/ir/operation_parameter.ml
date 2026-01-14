@@ -34,7 +34,7 @@ let create ~name ~description ~type_ ~kind =
 let of_body ?(name = "") ~components ~type_space body =
   let open Option.Let_syntax in
   if not (Request_body.content body |> Map.length = 1)
-  then [%log.global.debug "more than one content type; results are best effort"];
+  then [%log.debug "more than one content type; results are best effort"];
   let%bind content, media_type = Request_body.content body |> Map.to_alist |> List.hd in
   let%bind schema = Media_type.schema media_type in
   let name = name ^ "_body" in

@@ -59,11 +59,11 @@ module Type_space : sig
   val add_schema
     :  ?name:
          string
-         (* [singleton_enum_in_variant] is meant to indicate that the schema being processed is
-       an enum with just one element in it, and it belongs to a list of such singleton
-       enums in a oneOf. [add_schema] will treat this list as a variant type. See the
-       expect_test in ../test/tests.ml "list of enums in a oneOf translates to a variant
-       type" for an example *)
+         (* [singleton_enum_in_variant] is meant to indicate that the schema being
+            processed is an enum with just one element in it, and it belongs to a list of
+            such singleton enums in a oneOf. [add_schema] will treat this list as a
+            variant type. See the expect_test in ../test/tests.ml "list of enums in a
+            oneOf translates to a variant type" for an example *)
     -> ?singleton_enum_in_variant:bool
     -> schema:Schema.t Or_reference.t
     -> components:Components.t
