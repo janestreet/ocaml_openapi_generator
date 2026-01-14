@@ -59,7 +59,7 @@ let make_parameter_list ~path_parameters ~components ~operation_id ~type_space ~
   |> Hashtbl.to_alist
   |> List.fold ~init:([], type_space) ~f:(fun (lst, type_space) (api_name, parameter) ->
     let parameter_data = Parameter.data parameter in
-    [%log.global.debug "Processing parameter" (api_name : string) (operation_id : string)];
+    [%log.debug "Processing parameter" (api_name : string) (operation_id : string)];
     (let%bind schema = parameter_data |> Parameter.Parameter_data.schema in
      let type_id, type_space =
        Type_space.add_schema ~name:api_name ~schema ~components type_space
@@ -77,13 +77,13 @@ let make_parameter_list ~path_parameters ~components ~operation_id ~type_space ~
          ( create ~kind:(Operation_parameter.Operation_parameter_kind.Query required)
          , type_space )
      | Header _ ->
-       [%log.global.error
+       [%log.error
          "Skipping parameter, headers are not supported."
            (api_name : string)
            (operation_id : string)];
        None
      | Cookie _ ->
-       [%log.global.error
+       [%log.error
          "Skipping parameter, cookies are not supported."
            (api_name : string)
            (operation_id : string)];
