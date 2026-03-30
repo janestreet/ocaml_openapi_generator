@@ -1,0 +1,35 @@
+(library
+  (name {{ name }})
+  (libraries core async httpaf jsonaf uri ocaml_openapi_generator.openapi_runtime)
+  (preprocess (pps ppx_jane ppx_jsonaf_conv)))
+
+(rule
+  (targets
+{{ targets }}
+  )
+  {% if not archive %} (mode promote) {% endif %}
+  (deps (:openapi %{bin:ocaml-openapi-generator}) {{ spec }} dune)
+  (action (run %{openapi} generate {{ generator_flags }})))
+
+(rule
+  (targets dune.formatted.corrected)
+  (deps dune.corrected)
+  (action
+    (format-dune-file dune.corrected dune.formatted.corrected)))
+
+(rule
+ (alias runtest)
+ (deps dune.formatted.corrected)
+ (action
+  (diff dune dune.formatted.corrected)))
+
+{% if archive %}
+{% if archive.files %}
+(rule
+  (targets {{ archive.files }})
+  (mode promote)
+  (deps {{ archive.name }})
+  (action (run tar -xvf {{ archive.name }})))
+{% endif %}
+{% endif %}
+

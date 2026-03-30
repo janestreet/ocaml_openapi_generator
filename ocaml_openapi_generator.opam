@@ -6,23 +6,28 @@ bug-reports: "https://github.com/janestreet/ocaml_openapi_generator/issues"
 dev-repo: "git+https://github.com/janestreet/ocaml_openapi_generator.git"
 doc: "https://ocaml.janestreet.com/ocaml-core/latest/doc/ocaml_openapi_generator/index.html"
 license: "MIT"
+x-maintenance-intent: ["(latest)"]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
   "ocaml" {>= "5.1.0"}
   "async"
+  "async_interactive"
   "base"
   "core"
   "core_kernel"
   "core_unix"
+  "file_path"
   "jsonaf"
   "ocaml-embed-file"
   "ppx_jane"
   "ppx_jsonaf_conv"
-  "dune"             {>= "3.17.0"}
-  "httpaf"           {>= "0.7.1"}
-  "jingoo"           {>= "1.4.4" & < "1.5.0"}
+  "roundtrippable_command_param"
+  "dune"                         {>= "3.17.0"}
+  "httpaf"                       {>= "0.7.1"}
+  "jingoo"                       {>= "1.4.4" & < "1.5.0"}
+  "uri"                          {>= "3.0.0"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "An OpenAPI 3 to OCaml client generator."

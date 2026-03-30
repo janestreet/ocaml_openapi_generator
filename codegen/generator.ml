@@ -7,6 +7,8 @@ open Jingoo
 open Jingoo.Jg_types
 open Embedded_strings
 
+let jbuild_corrected_file = "dune.corrected"
+
 let method_to_ocaml = function
   | `GET -> "`GET"
   | `CONNECT -> "`CONNECT"
@@ -46,8 +48,8 @@ let env = { Jg_types.std_env with autoescape = false }
 let type_definition
   ~type_id
   ~type_space
-  ~raise_on_optional_null
-  ~include_unknown_fallback_for_enums
+  ~code_gen_config:
+    { Config.Code_gen.include_unknown_fallback_for_enums; raise_on_optional_null }
   =
   let%bind.Option type_ = Type_space.type_of_id ~type_id type_space in
   let type_map_to_jingoo type_map =
@@ -131,8 +133,8 @@ let get_type_names ~type_space =
     ( type_definition
         ~type_id
         ~type_space
-        ~raise_on_optional_null:true
-        ~include_unknown_fallback_for_enums:false
+        ~code_gen_config:
+          { raise_on_optional_null = true; include_unknown_fallback_for_enums = false }
     , type_name ))
   |> List.filter_map ~f:(fun (type_definition, type_name) ->
     match type_definition with
@@ -141,17 +143,12 @@ let get_type_names ~type_space =
   |> List.dedup_and_sort ~compare:Name.compare
 ;;
 
-let make_type_mls ~type_space ~raise_on_optional_null ~include_unknown_fallback_for_enums =
+let make_type_mls ~type_space ~code_gen_config =
   let type_space_map = Type_space.to_map type_space in
   Map.to_alist type_space_map
   |> List.map ~f:(fun (type_id, type_) -> type_id, Type.name type_)
   |> List.map ~f:(fun (type_id, type_name) ->
-    ( type_definition
-        ~type_id
-        ~type_space
-        ~raise_on_optional_null
-        ~include_unknown_fallback_for_enums
-    , type_name ))
+    type_definition ~type_id ~type_space ~code_gen_config, type_name)
   |> List.filter_map ~f:(fun (type_definition, type_name) ->
     match type_definition with
     | None -> None
@@ -325,14 +322,32 @@ let make_operation_definition_ml ~operation_list ~type_space =
   Jg_template.from_string ~env ~models operation_definition_dot_jingoo
 ;;
 
-let make_jbuild ~name ~spec_file ~paths =
+let make_jbuild ~(config : Config.t) ~paths =
+  let paths = Set.to_list paths in
+  let archive, targets =
+    match config.generated_files_archive with
+    | None -> Tnull, Tstr (String.concat_lines (jbuild_corrected_file :: paths))
+    | Some archive ->
+      let archive_config =
+        Tobj [ "name", Tstr archive; "files", Tstr (String.concat_lines paths) ]
+      in
+      archive_config, Tstr (String.concat_lines [ jbuild_corrected_file; archive ])
+  in
   let models =
-    [ "name", Tstr name
-    ; "spec", Tstr spec_file
-    ; "targets", paths |> Set.to_list |> String.concat ~sep:"\n" |> Tstr
+    [ "name", Tstr config.name
+    ; "spec", Tstr config.spec_file
+    ; "targets", targets
+    ; "archive", archive
+    ; ( "generator_flags"
+      , Tstr
+          (String.concat
+             ~sep:" "
+             (Roundtrippable_command_param.command_args
+                Config.roundtrippable_command_param
+                config)) )
     ]
   in
-  Jg_template.from_string ~env ~models jbuild_dot_jingoo
+  Jg_template.from_string ~env ~models dune_dot_jingoo
 ;;
 
 let make_operation_method_lists ~type_space ~paths ~components =
@@ -438,19 +453,22 @@ let disambiguate_names (operation_lists, type_space) =
   List.rev new_operation_lists, type_space
 ;;
 
-let make_files
-  ~config
-  ~api
-  ~spec_file
-  ~raise_on_optional_null
-  ~include_unknown_fallback_for_enums
-  =
+let make_files ~config ~api =
+  let { Config.destination
+      ; spec_file = _
+      ; generated_files_archive
+      ; name
+      ; code_gen = code_gen_config
+      }
+    =
+    config
+  in
   let components = Open_api.components api in
-  let destination = Config.destination config in
   let files_written = Hash_set.create (module String) in
+  let temp_dir = Filename_unix.temp_dir "openapi_generator" name ~in_dir:destination in
   let mkpath rel_path =
     Hash_set.add files_written rel_path;
-    Filename.of_parts [ destination; String.lowercase rel_path ]
+    Filename.of_parts [ temp_dir; String.lowercase rel_path ]
   in
   let type_space = Openapi_codegen_ir.Typify.Type_space.empty in
   let paths = Open_api.paths api in
@@ -469,7 +487,7 @@ let make_files
   in
   let%bind.Deferred () =
     Writer.with_file
-      (mkpath (config.name ^ ".ml"))
+      (mkpath (name ^ ".ml"))
       ~f:(fun writer ->
         Writer.write writer (make_module_aliases_ml ~operation_lists ~type_space);
         Deferred.return ())
@@ -480,12 +498,7 @@ let make_files
       Deferred.return ())
   in
   let%bind.Deferred () =
-    let files_to_write =
-      make_type_mls
-        ~type_space
-        ~raise_on_optional_null
-        ~include_unknown_fallback_for_enums
-    in
+    let files_to_write = make_type_mls ~type_space ~code_gen_config in
     Deferred.List.iter
       ~how:`Sequential
       files_to_write
@@ -507,14 +520,31 @@ let make_files
       Deferred.return ())
   in
   let%bind.Deferred () =
-    Writer.with_file (mkpath "dune.corrected") ~f:(fun writer ->
-      Writer.write
-        writer
-        (make_jbuild
-           ~name:config.name
-           ~spec_file
-           ~paths:(Set.of_hash_set (module String) files_written));
+    match generated_files_archive with
+    | None -> return ()
+    | Some archive_name ->
+      Process.run_exn
+        ~working_dir:temp_dir
+        ~prog:"tar"
+        ~args:
+          ("-cvf" :: archive_name :: "--remove-files" :: Hash_set.to_list files_written)
+        ()
+      |> Deferred.ignore_m
+  in
+  let paths = Set.of_hash_set (module String) files_written in
+  let%bind.Deferred () =
+    Writer.with_file (mkpath jbuild_corrected_file) ~f:(fun writer ->
+      Writer.write writer (make_jbuild ~config ~paths);
       Deferred.return ())
   in
+  let%bind.Deferred generated_files = Sys.ls_dir temp_dir in
+  let%bind.Deferred () =
+    Deferred.List.iter
+      generated_files
+      ~how:(`Max_concurrent_jobs 16)
+      ~f:(fun generated_file ->
+        Unix.rename ~src:(temp_dir ^/ generated_file) ~dst:(destination ^/ generated_file))
+  in
+  let%bind.Deferred () = Unix.rmdir temp_dir in
   Deferred.Or_error.return ()
 ;;
