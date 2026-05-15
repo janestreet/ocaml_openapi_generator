@@ -37,4 +37,4 @@ val resolve_parameter_ref
 val resolve_all_parameters
   :  components:Components.t
   -> Parameter.t Or_reference.t list
-  -> (string, Parameter.t) Base.Hashtbl.t
+  -> Parameter.t String.Map.t

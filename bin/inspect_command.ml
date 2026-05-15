@@ -74,7 +74,7 @@ let types_command =
         let typespace = Openapi_codegen_ir.Typify.Type_space.to_map type_space in
         Map.filter typespace ~f:(fun v ->
           match Openapi_codegen_ir.Typify.Type.structure v with
-          | Existing_type | List _ | Set _ -> false
+          | Existing_type _ | List _ -> false
           | _ -> true)
         |> Map.iter ~f:(fun v -> print_s [%sexp (v : Openapi_codegen_ir.Typify.Type.t)])]
 ;;

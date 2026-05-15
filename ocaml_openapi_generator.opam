@@ -15,12 +15,14 @@ depends: [
   "async"
   "async_interactive"
   "base"
+  "capitalization"
   "core"
   "core_kernel"
   "core_unix"
   "file_path"
   "jsonaf"
   "ocaml-embed-file"
+  "ppx_derive_at_runtime"
   "ppx_jane"
   "ppx_jsonaf_conv"
   "roundtrippable_command_param"
@@ -29,7 +31,7 @@ depends: [
   "jingoo"                       {>= "1.4.4" & < "1.5.0"}
   "uri"                          {>= "3.0.0"}
 ]
-available: arch != "arm32" & arch != "x86_32"
+available: arch != "x86_32"
 synopsis: "An OpenAPI 3 to OCaml client generator."
 description: "
 An OpenAPI 3 to OCaml client generator.

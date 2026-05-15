@@ -13,10 +13,13 @@ end
 module Operation_parameter_kind = struct
   type t =
     | Path
-    | Query of bool
+    | Query of
+        { required : bool
+        ; style : Parameter.Query_style.t
+        }
     | Header of bool
     | Body of Body_content_type.t
-  [@@deriving sexp]
+  [@@deriving sexp_of]
 end
 
 type t =
@@ -24,11 +27,12 @@ type t =
   ; description : string option
   ; type_ : Operation_parameter_type.t
   ; kind : Operation_parameter_kind.t
+  ; explode : bool option
   }
-[@@deriving fields ~getters ~setters ~iterators:create, sexp]
+[@@deriving fields ~getters ~setters ~iterators:create, sexp_of]
 
-let create ~name ~description ~type_ ~kind =
-  Fields.create ~name:(Name.of_raw_string name) ~description ~type_ ~kind
+let create ~name ~description ~type_ ~kind ~explode =
+  Fields.create ~name:(Name.of_raw_string name) ~description ~type_ ~kind ~explode
 ;;
 
 let of_body ?(name = "") ~components ~type_space body =
@@ -42,6 +46,8 @@ let of_body ?(name = "") ~components ~type_space body =
   let type_, type_space =
     match content_type with
     | Octet_stream -> Operation_parameter_type.Raw_body, type_space
+    | Multipart_form_data | Multipart_mixed ->
+      Operation_parameter_type.Raw_body, type_space
     | Json | Form_urlencoded ->
       let type_id, type_space =
         Type_space.add_schema ~name ~schema ~components type_space
@@ -55,5 +61,6 @@ let of_body ?(name = "") ~components ~type_space body =
         ~description
         ~type_
         ~kind:(Operation_parameter_kind.Body content_type)
+        ~explode:None
     , type_space )
 ;;

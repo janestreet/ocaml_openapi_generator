@@ -1,5 +1,6 @@
 (library
  (name openapi_codegen_ir)
- (libraries async core httpaf jsonaf base.md5 openapi_runtime openapi_spec)
+ (libraries async core httpaf jsonaf base.md5 openapi_runtime openapi_spec
+   roundtrippable_command_param.roundtrippable_arg_type)
  (preprocess
   (pps ppx_jane ppx_jsonaf_conv)))

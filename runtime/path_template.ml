@@ -25,6 +25,12 @@ let of_template_string template =
         Parameter parameter)))
 ;;
 
+let encode_path path =
+  List.map ~f:Uri.pct_encode path
+  |> List.map ~f:(fun path -> [%string "/%{path}"])
+  |> String.concat
+;;
+
 let render_path ?(parameters = String.Map.empty) (t : t) =
   let%map filled =
     List.map t ~f:(function
@@ -32,7 +38,7 @@ let render_path ?(parameters = String.Map.empty) (t : t) =
       | Parameter p -> Map.find parameters p)
     |> Option.all
   in
-  "/" ^ String.concat ~sep:"/" filled
+  encode_path filled
 ;;
 
 let%expect_test "of_template_string basic test" =

@@ -1,5 +1,3 @@
-module Jane_object_tag = Jane_object_tag
-
 {% for type_ in types %}
-module {{ type_ }} = {{ type_ }}
+module {{ type_.nice_name }} = {{ type_.real_name }}
 {% endfor %}

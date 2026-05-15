@@ -4,8 +4,6 @@ open Openapi_spec.Types
 open Openapi_codegen_ir
 open Openapi_codegen_ir.Typify
 
-val type_reference : type_id:Type_id.t -> type_space:Type_space.t -> string
-
 val type_definition
   :  type_id:Type_id.t
   -> type_space:Type_space.t
@@ -15,6 +13,8 @@ val type_definition
 val make_operation_definition_ml
   :  operation_list:Operation_method.t list
   -> type_space:Type_space.t
+  -> maximum_filename_length:Name.Maximum_filename_length.t
+  -> normalize_operation_ids:bool
   -> string
 
 val make_operation_method_list
