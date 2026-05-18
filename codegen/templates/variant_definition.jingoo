@@ -1,20 +1,17 @@
 {%- autoescape false -%}
 type t =
-  {% for variant in variants %}| {{ variant.name }}
-  {% endfor %}{% if include_unknown %}| Unknown of string
-  {% endif %}[@@deriving sexp]
+  {% for variant in variants %}| {{ variant.name }}{%- if variant.api_name %} [@rename {{ variant.api_name }}]{%- endif %}
+  {% endfor %}{% if unknown_variant %}| {{unknown_variant}} of string [@fallback]
+  {% endif %}[@@deriving sexp, compare, string {%- if capitalization %} ~capitalize:"{{ capitalization }}"{%- endif %}]
 
-let jsonaf_of_t = function
-  {% for variant in variants %}| {{ variant.name }} -> {{ variant.ocaml }}
-  {% endfor -%}
-  {% if include_unknown %}| Unknown unknown -> `String unknown{% endif %}
+let jsonaf_of_t t = `String (to_string t)
 ;;
 
-let t_of_jsonaf = function
-  {% for variant in variants %}| {{ variant.ocaml }} -> {{ variant.name }}
-  {% endfor -%}
-  {% if include_unknown %}| `String unknown -> Unknown unknown 
-  {% else %}| `String unknown -> Core.failwithf {|unable to parse {{ module_name }}: unexpected value "%s"|} unknown ()
-  {% endif %}| _ -> failwith {|unable to parse {{ module_name }}|}
+let t_of_jsonaf json =
+  match json with
+  | `String string ->
+    (try of_string string with
+    | exn -> Jsonaf.Conv.of_jsonaf_error_exn exn json)
+  | _ -> Jsonaf.Conv.of_jsonaf_error {|unable to parse {{ module_name }}|} json
 ;;
 {%- endautoescape -%}

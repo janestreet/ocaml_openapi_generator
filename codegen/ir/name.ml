@@ -1,10 +1,37 @@
 open! Core
 
+module Maximum_filename_length = struct
+  type t = int [@@deriving sexp, equal]
+
+  let smallest_possible_value = 32 (* Things can get pretty weird otherwise. *)
+
+  let of_int_exn t =
+    if t < smallest_possible_value
+    then
+      failwith
+        [%string
+          "Maximum filename length cannot be smaller than \
+           %{smallest_possible_value#Int}, got %{t#Int}."];
+    t
+  ;;
+
+  let t_of_sexp sexp = t_of_sexp sexp |> of_int_exn
+  let arg_type = Command.Arg_type.map Command.Arg_type.Export.int ~f:of_int_exn
+
+  let roundtrippable_arg_type =
+    Roundtrippable_arg_type.create
+      ~arg_type
+      ~to_string:Int.to_string
+      ~arg_placeholder:"character-count"
+  ;;
+
+  let default = 255
+end
+
 module T = struct
   type t =
     { sanitized : string
     ; raw : string
-    ; namespace : string option
     }
   [@@deriving sexp, compare]
 end
@@ -66,7 +93,7 @@ let%expect_test "Test to_snake_case" =
   [%expect {| some_uppercased_snake_case_string |}]
 ;;
 
-let of_raw_string ?namespace raw_string =
+let of_raw_string raw_string =
   (* List of OCaml reserved keywords *)
   let keywords =
     [ "and"
@@ -135,6 +162,9 @@ let of_raw_string ?namespace raw_string =
       match c with
       | '+' -> "plus"
       | '/' -> "slash"
+      | ',' -> "comma"
+      | '|' -> "pipe"
+      | ';' -> "semicolon"
       | _ -> "_")
   in
   let str_no_illegal_chars =
@@ -156,7 +186,7 @@ let of_raw_string ?namespace raw_string =
     if List.mem keywords snake_case_str ~equal:String.equal then "_" else ""
   in
   let sanitized_string = extra_prefix ^ snake_case_str ^ extra_suffix in
-  { raw = raw_string; sanitized = sanitized_string; namespace }
+  { raw = raw_string; sanitized = sanitized_string }
 ;;
 
 let of_operation_path raw_string =
@@ -167,26 +197,45 @@ let of_operation_path raw_string =
     |> String.lowercase
     |> drop_consecutive_underscores
   in
-  { sanitized; raw = raw_string; namespace = None }
+  let sanitized = if String.is_empty sanitized then "top_level_" else sanitized in
+  { sanitized; raw = raw_string }
 ;;
 
-let to_module_name { sanitized; namespace; _ } =
-  let leaf_module = String.capitalize sanitized in
-  match namespace with
-  | None -> leaf_module
-  | Some namespace -> String.capitalize namespace ^ "." ^ leaf_module
+let prepend_if_starts_with_underscore str =
+  if String.is_prefix str ~prefix:"_" then "underscore" ^ str else str
 ;;
 
-let to_variant { sanitized; _ } = String.capitalize sanitized
-let to_variable_name { sanitized; _ } = sanitized
-let to_raw_string { raw; _ } = raw
+let capitalize str = prepend_if_starts_with_underscore str |> String.capitalize
 
-let to_truncated_name { sanitized; _ } =
-  if String.length sanitized > 100
-  then Md5_lib.string sanitized |> Md5_lib.to_hex |> String.append "truncated_"
+let sanitize_maybe_truncate_module_name_uncapitalized sanitized ~maximum_filename_length =
+  let sanitized = prepend_if_starts_with_underscore sanitized in
+  let maximum_module_length = maximum_filename_length - String.length ".ml" in
+  if String.length sanitized > maximum_module_length
+  then (
+    let hash = Md5_lib.string sanitized |> Md5_lib.to_hex in
+    String.prefix sanitized (maximum_filename_length - String.length hash) ^ hash)
   else sanitized
 ;;
 
-let filenames_equal a b = String.(to_truncated_name a = to_truncated_name b)
+let to_module_name { sanitized; _ } ~kind =
+  match kind with
+  | `Full -> capitalize sanitized
+  | `Truncated maximum_filename_length ->
+    sanitize_maybe_truncate_module_name_uncapitalized sanitized ~maximum_filename_length
+    |> String.capitalize
+;;
+
+let to_variant { sanitized; _ } = capitalize sanitized
+let to_variable_name { sanitized; _ } = sanitized
+let to_raw_string { raw; _ } = raw
+
+let to_filename { sanitized; _ } ~maximum_filename_length =
+  sanitize_maybe_truncate_module_name_uncapitalized sanitized ~maximum_filename_length
+  ^ ".ml"
+;;
+
+let filenames_equal a b ~maximum_filename_length =
+  String.(to_filename ~maximum_filename_length a = to_filename ~maximum_filename_length b)
+;;
 
 include Comparable.Make (T)

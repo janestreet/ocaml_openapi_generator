@@ -15,7 +15,7 @@ type t =
   ; parameters : Operation_parameter.t list
   ; responses : Operation_response.t list
   }
-[@@deriving fields ~getters ~setters ~iterators:create, sexp]
+[@@deriving fields ~getters ~setters ~iterators:create, sexp_of]
 
 val of_operation
   :  path:string

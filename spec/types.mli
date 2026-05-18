@@ -6,10 +6,7 @@ exception Openapi_spec_violation of string
 val combine_exn : exn -> exn -> exn
 
 module Jsonaf_string_map : sig
-  include module type of String.Map
-
-  val jsonaf_of_t : ('a -> Jsonaf.t) -> 'a t -> Jsonaf.t
-  val t_of_jsonaf : (Jsonaf.t -> 'a) -> Jsonaf.t -> 'a t
+  type 'a t = 'a String.Map.t [@@deriving jsonaf, sexp_of]
 end
 
 module Component_lookup_location : sig
@@ -22,7 +19,7 @@ end
 
 module Reference : sig
   type 'a t = { ref_ : string }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of, compare]
 
   val last_segment : string -> string option
 end
@@ -31,9 +28,8 @@ module Or_reference : sig
   type 'a t =
     | Ref of 'a Reference.t
     | Value of 'a
+  [@@deriving jsonaf, sexp_of, compare]
 
-  val t_of_jsonaf : (Jsonaf_kernel.t -> 'a) -> Jsonaf_kernel.t -> 'a t
-  val jsonaf_of_t : ('a -> Jsonaf_kernel.t) -> 'a t -> Jsonaf_kernel.t
   val value_exn : 'a t -> 'a
 end
 
@@ -43,7 +39,7 @@ module Contact : sig
     ; url : string option
     ; email : string option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module License : sig
@@ -51,7 +47,7 @@ module License : sig
     { name : string
     ; url : string option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Info : sig
@@ -63,7 +59,7 @@ module Info : sig
     ; license : License.t option
     ; version : string
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Server_variable : sig
@@ -72,16 +68,16 @@ module Server_variable : sig
     ; default : string
     ; description : string option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Server : sig
   type t =
     { url : string
     ; description : string option
-    ; variables : Server_variable.t Jsonaf_string_map.t
+    ; variables : Server_variable.t String.Map.t
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module External_documentation : sig
@@ -89,7 +85,7 @@ module External_documentation : sig
     { description : string option
     ; url : string
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Tag : sig
@@ -98,11 +94,11 @@ module Tag : sig
     ; description : string option
     ; external_docs : External_documentation.t option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Security_requirement : sig
-  type t = string list Jsonaf_string_map.t [@@deriving jsonaf]
+  type t = string list String.Map.t [@@deriving jsonaf]
 end
 
 module Example : sig
@@ -112,27 +108,27 @@ module Example : sig
     ; value : Jsonaf.t option
     ; external_value : string option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Link : sig
   type t =
     { operation_ref : string option
     ; operation_id : string option
-    ; parameters : Jsonaf.t Jsonaf_string_map.t
+    ; parameters : Jsonaf.t String.Map.t
     ; request_body : Jsonaf.t option
     ; description : string option
     ; server : Server.t option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Discriminator : sig
   type t =
     { property_name : string
-    ; mapping : string Jsonaf_string_map.t
+    ; mapping : string String.Map.t option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module XML : sig
@@ -143,10 +139,123 @@ module XML : sig
     ; attribute : bool
     ; wrapped : bool
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Schema : sig
+  module Type : sig
+    type t =
+      | Array
+      | Boolean
+      | Integer
+      | Null
+      | Number
+      | Object
+      | String
+      | Unable_to_parse of string
+    [@@deriving string, jsonaf, compare, sexp_of]
+  end
+
+  module Format : sig
+    (** Formats from the OpenAPI Format Registry. See
+        {{:https://spec.openapis.org/registry/format/} OpenAPI Format Registry}.
+
+        This list might drift out of date, and not all the formats are explicitly
+        supported by the code generator. *)
+    type t =
+      | Base64url
+      (** Binary data encoded as a url-safe string as defined in RFC4648. Compatible with:
+          string. Deprecated. *)
+      | Binary (** Any sequence of octets. Compatible with: string. Deprecated. *)
+      | Byte
+      (** Base64 encoded data as defined in RFC4648. Compatible with: string. Deprecated. *)
+      | Char (** A single character. Compatible with: string. *)
+      | Commonmark (** Commonmark-formatted text. Compatible with: string. *)
+      | Date_time_local
+      (** RFC3339 date-time without the timezone component. Compatible with: string. *)
+      | Date_time
+      (** Date and time as defined by date-time - RFC3339. Compatible with: string. *)
+      | Date (** Date as defined by full-date - RFC3339. Compatible with: string. *)
+      | Decimal
+      (** A fixed point decimal number of unspecified precision and range. Compatible
+          with: string, number. *)
+      | Decimal128
+      (** A decimal floating-point number with 34 significant decimal digits. Compatible
+          with: string, number. *)
+      | Double_int
+      (** An integer that can be stored in an IEEE 754 double-precision number without
+          loss of precision. Compatible with: number. *)
+      | Double (** Double precision floating point number. Compatible with: number. *)
+      | Duration
+      (** Duration as defined by duration - RFC3339. Compatible with: string. *)
+      | Email
+      (** An email address as defined as Mailbox in RFC5321. Compatible with: string. *)
+      | Float (** Single precision floating point number. Compatible with: number. *)
+      | Hostname (** A host name as defined by RFC1123. Compatible with: string. *)
+      | Html (** HTML-formatted text. Compatible with: string. *)
+      | Http_date
+      (** Date and time as defined by HTTP-date - RFC7231. Compatible with: string. *)
+      | Idn_email
+      (** An email address as defined as Mailbox in RFC6531. Compatible with: string. *)
+      | Idn_hostname
+      (** An internationalized host name as defined by RFC5890. Compatible with: string. *)
+      | Int16 (** Signed 16-bit integer. Compatible with: number. *)
+      | Int32 (** Signed 32-bit integer. Compatible with: number. *)
+      | Int64 (** Signed 64-bit integer. Compatible with: number, string. *)
+      | Int8 (** Signed 8-bit integer. Compatible with: number. *)
+      | Ipv4
+      (** An IPv4 address as defined as dotted-quad by RFC2673. Compatible with: string. *)
+      | Ipv6 (** An IPv6 address as defined by RFC4673. Compatible with: string. *)
+      | Iri_reference
+      (** An Internationalized Resource Identifier as defined in RFC3987. Compatible with:
+          string. *)
+      | Iri
+      (** An Internationalized Resource Identifier as defined in RFC3987. Compatible with:
+          string. *)
+      | Json_pointer
+      (** A JSON string representation of a JSON Pointer as defined in RFC6901. Compatible
+          with: string. *)
+      | Media_range
+      (** A media type as defined by the media-range ABNF production in RFC9110.
+          Compatible with: string. *)
+      | Password (** A string that hints to obscure the value. Compatible with: string. *)
+      | Regex (** A regular expression as defined in ECMA-262. Compatible with: string. *)
+      | Relative_json_pointer
+      (** A JSON string representation of a relative JSON Pointer as defined in draft RFC
+          01. Compatible with: string. *)
+      | Sf_binary
+      (** Structured fields byte sequence as defined in RFC8941. Compatible with: string. *)
+      | Sf_boolean
+      (** Structured fields boolean as defined in RFC8941. Compatible with: string. *)
+      | Sf_decimal
+      (** Structured fields decimal as defined in RFC8941. Compatible with: number. *)
+      | Sf_integer
+      (** Structured fields integer as defined in RFC8941. Compatible with: number. *)
+      | Sf_string
+      (** Structured fields string as defined in RFC8941. Compatible with: string. *)
+      | Sf_token
+      (** Structured fields token as defined in RFC8941. Compatible with: string. *)
+      | Time_local
+      (** RFC3339 time without the timezone component. Compatible with: string. *)
+      | Time (** Time as defined by full-time - RFC3339. Compatible with: string. *)
+      | Uint16 (** Unsigned 16-bit integer. Compatible with: number. *)
+      | Uint32 (** Unsigned 32-bit integer. Compatible with: number. *)
+      | Uint64 (** Unsigned 64-bit integer. Compatible with: number, string. *)
+      | Uint8 (** Unsigned 8-bit integer. Compatible with: number. *)
+      | Unixtime
+      (** Seconds since Jan 1st 1970 - IEEE1003.1-2024/POSIX.1-2024. Compatible with:
+          number, string. *)
+      | Uri_reference
+      (** A URI reference as defined in RFC3986. Compatible with: string. *)
+      | Uri_template (** A URI Template as defined in RFC6570. Compatible with: string. *)
+      | Uri
+      (** A Uniform Resource Identifier as defined in RFC3986. Compatible with: string. *)
+      | Uuid
+      (** A Universally Unique IDentifier as defined in RFC4122. Compatible with: string. *)
+      | Unable_to_parse of string
+    [@@deriving string, jsonaf, compare, sexp_of]
+  end
+
   type t =
     { title : string option
     ; multiple_of : float option
@@ -164,16 +273,16 @@ module Schema : sig
     ; min_properties : int option
     ; required : string list
     ; enum : Jsonaf.t list option
-    ; type_ : string option
+    ; type_ : Type.t option
     ; all_of : t Or_reference.t list option
     ; one_of : t Or_reference.t list option
     ; any_of : t Or_reference.t list option
     ; not_ : t Or_reference.t option
     ; items : t Or_reference.t option
-    ; properties : t Or_reference.t Jsonaf_string_map.t option
-    ; additional_properties : Jsonaf.t option
+    ; properties : t Or_reference.t String.Map.t option
+    ; additional_properties : [ `Allowed of t Or_reference.t | `Not_allowed ] option
     ; description : string option
-    ; format : string option
+    ; format : Format.t option
     ; default : Jsonaf.t option
     ; nullable : bool
     ; discriminator : Discriminator.t option
@@ -184,7 +293,7 @@ module Schema : sig
     ; example : Jsonaf.t option
     ; deprecated : bool
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module rec Header : sig
@@ -198,8 +307,8 @@ module rec Header : sig
     ; allow_reserved : bool
     ; schema : Schema.t Or_reference.t option
     ; example : Jsonaf.t option
-    ; examples : Example.t Jsonaf_string_map.t
-    ; content : Media_type.t Jsonaf_string_map.t
+    ; examples : Example.t String.Map.t
+    ; content : Media_type.t String.Map.t
     }
   [@@deriving jsonaf]
 end
@@ -207,12 +316,12 @@ end
 and Encoding : sig
   type t =
     { content_type : string option
-    ; headers : Header.t Or_reference.t Jsonaf_string_map.t
+    ; headers : Header.t Or_reference.t String.Map.t
     ; style : string option
     ; explode : bool option
     ; allow_reserved : bool
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 and Media_type_or_server_sent_event : sig
@@ -228,41 +337,24 @@ and Media_type : sig
   type t =
     { schema : Schema.t Or_reference.t option
     ; example : Jsonaf.t option
-    ; examples : Example.t Or_reference.t Jsonaf_string_map.t
-    ; encoding : Encoding.t Jsonaf_string_map.t
+    ; examples : Example.t Or_reference.t String.Map.t
+    ; encoding : Encoding.t String.Map.t
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Parameter : sig
-  module Parameter_data : sig
-    type t =
-      { name : string
-      ; description : string option
-      ; required : bool
-      ; deprecated : bool
-      ; example : Jsonaf.t option
-      ; examples : Example.t Or_reference.t Jsonaf_string_map.t
-      ; explode : bool option
-      ; schema : Schema.t Or_reference.t option
-      ; content : Media_type.t Jsonaf_string_map.t option
-      ; allow_reserved : bool option
-      ; allow_empty_value : bool option
-      }
-    [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
-  end
-
   module Query_style : sig
     type t =
       | Form
       | Space_delimited
       | Pipe_delimited
       | Deep_object
-    [@@deriving jsonaf]
+    [@@deriving string, sexp_of]
   end
 
   module Header_style : sig
-    type t = Simple [@@deriving jsonaf]
+    type t = Simple [@@deriving string, sexp_of]
   end
 
   module Path_style : sig
@@ -270,57 +362,71 @@ module Parameter : sig
       | Matrix
       | Label
       | Simple
-    [@@deriving jsonaf]
+    [@@deriving string, sexp_of]
   end
 
   module Cookie_style : sig
-    type t = Form [@@deriving jsonaf]
+    type t = Form [@@deriving string, sexp_of]
+  end
+
+  module Parameter_schema : sig
+    type t =
+      | Directly_defined of Schema.t Or_reference.t
+      | Via_media_type of
+          { media_type : string
+          ; content : Media_type.t
+          }
+    [@@deriving sexp_of, variants]
+  end
+
+  module In : sig
+    type t =
+      | Query of
+          { style : Query_style.t
+          ; allow_reserved : bool option
+          ; allow_empty_value : bool option
+          }
+      | Header of { style : Header_style.t }
+      | Path of { style : Path_style.t }
+      | Cookie of { style : Cookie_style.t }
+    [@@deriving sexp_of]
   end
 
   type t =
-    | Query of
-        { parameter_data : Parameter_data.t
-        ; style : Query_style.t
-        }
-    | Header of
-        { parameter_data : Parameter_data.t
-        ; style : Header_style.t
-        }
-    | Path of
-        { parameter_data : Parameter_data.t
-        ; style : Path_style.t
-        }
-    | Cookie of
-        { parameter_data : Parameter_data.t
-        ; style : Cookie_style.t
-        }
-  [@@deriving jsonaf]
-
-  val get_style : (string * Jsonaf.t) list -> Jsonaf.t
-  val data : t -> Parameter_data.t
+    { name : string
+    ; description : string option
+    ; required : bool
+    ; deprecated : bool
+    ; in_ : In.t
+    ; schema : Parameter_schema.t
+    ; example : Jsonaf.t option
+    ; examples : Example.t Or_reference.t String.Map.t
+    ; explode : bool option
+    }
+  [@@deriving jsonaf, sexp_of, fields ~getters ~setters]
 end
 
 module Request_body : sig
   type t =
     { description : string option
-    ; content : Media_type.t Jsonaf_string_map.t
+    ; content : Media_type.t String.Map.t
     ; required : bool
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Response : sig
   type t =
     { description : string
-    ; headers : Header.t Or_reference.t Jsonaf_string_map.t
-    ; content : Media_type_or_server_sent_event.t Jsonaf_string_map.t
-    ; links : Link.t Or_reference.t Jsonaf_string_map.t
+    ; headers : Header.t Or_reference.t String.Map.t
+    ; content : Media_type_or_server_sent_event.t String.Map.t
+    ; links : Link.t Or_reference.t String.Map.t
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Responses : sig
-  type t = Response.t Or_reference.t Jsonaf_string_map.t [@@deriving jsonaf]
+  type t = Response.t Or_reference.t String.Map.t [@@deriving jsonaf, sexp_of]
 end
 
 module rec Operation : sig
@@ -333,12 +439,12 @@ module rec Operation : sig
     ; parameters : Parameter.t Or_reference.t list
     ; request_body : Request_body.t Or_reference.t option
     ; responses : Responses.t
-    ; callbacks : Callback.t Or_reference.t Jsonaf_string_map.t
+    ; callbacks : Callback.t Or_reference.t String.Map.t
     ; deprecated : bool
     ; security : Security_requirement.t list option
     ; servers : Server.t list
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 and Path_item : sig
@@ -357,7 +463,7 @@ and Path_item : sig
     ; servers : Server.t list
     ; parameters : Parameter.t Or_reference.t list
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 
   val all_operations : t -> (Httpaf.Method.t * Operation.t) list
 end
@@ -367,7 +473,7 @@ and Callback : sig
 end
 
 module Paths : sig
-  type t = Path_item.t Jsonaf_string_map.t [@@deriving jsonaf]
+  type t = Path_item.t String.Map.t [@@deriving jsonaf]
 end
 
 module Oauth_flow : sig
@@ -375,9 +481,9 @@ module Oauth_flow : sig
     { authorization_url : string option
     ; token_url : string option
     ; refresh_url : string option
-    ; scopes : string Jsonaf_string_map.t
+    ; scopes : string String.Map.t
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Oauth_flows : sig
@@ -387,7 +493,7 @@ module Oauth_flows : sig
     ; client_credentials : Oauth_flow.t option
     ; authorization_code : Oauth_flow.t option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Security_scheme : sig
@@ -401,22 +507,22 @@ module Security_scheme : sig
     ; flows : Oauth_flows.t option
     ; open_id_connect_url : string option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Components : sig
   type t =
-    { schemas : Schema.t Or_reference.t Jsonaf_string_map.t
-    ; responses : Response.t Or_reference.t Jsonaf_string_map.t
-    ; parameters : Parameter.t Or_reference.t Jsonaf_string_map.t
-    ; examples : Example.t Or_reference.t Jsonaf_string_map.t
-    ; request_bodies : Request_body.t Or_reference.t Jsonaf_string_map.t
-    ; headers : Header.t Or_reference.t Jsonaf_string_map.t
-    ; security_schemes : Security_scheme.t Or_reference.t Jsonaf_string_map.t
-    ; links : Link.t Or_reference.t Jsonaf_string_map.t
-    ; callbacks : Callback.t Or_reference.t Jsonaf_string_map.t
+    { schemas : Schema.t Or_reference.t String.Map.t
+    ; responses : Response.t Or_reference.t String.Map.t
+    ; parameters : Parameter.t Or_reference.t String.Map.t
+    ; examples : Example.t Or_reference.t String.Map.t
+    ; request_bodies : Request_body.t Or_reference.t String.Map.t
+    ; headers : Header.t Or_reference.t String.Map.t
+    ; security_schemes : Security_scheme.t Or_reference.t String.Map.t
+    ; links : Link.t Or_reference.t String.Map.t
+    ; callbacks : Callback.t Or_reference.t String.Map.t
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end
 
 module Open_api : sig
@@ -430,5 +536,5 @@ module Open_api : sig
     ; tags : Tag.t list option
     ; external_docs : External_documentation.t option
     }
-  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create]
+  [@@deriving jsonaf, fields ~getters ~setters ~iterators:create, sexp_of]
 end

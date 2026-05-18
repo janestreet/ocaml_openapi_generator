@@ -1,5 +1,4 @@
 {%- autoescape false -%}
-module Jane_object_tag = Jane_object_tag
 module Operations = Operations
 module Types = Types
 

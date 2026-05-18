@@ -1,10 +1,11 @@
 (library
  (name openapi_codegen)
- (libraries async core core_unix.filename_unix httpaf jingoo jsonaf
-   openapi_codegen_ir openapi_runtime openapi_spec
+ (libraries async capitalization core core_unix.filename_unix httpaf jingoo
+   jsonaf openapi_codegen_ir openapi_runtime openapi_spec
    roundtrippable_command_param)
  (preprocess
-  (pps ppx_jane ppx_jsonaf_conv roundtrippable_command_param.ppx)))
+  (pps ppx_jane ppx_jsonaf_conv ppx_derive_at_runtime.locally
+    -derive-from-module=To_jingoo roundtrippable_command_param.ppx)))
 
 (rule
  (targets embedded_strings.ml embedded_strings.mli)
@@ -14,7 +15,7 @@
    ./templates/variant_definition.jingoo
    ./templates/variant_definition_object.jingoo
    ./templates/variant_definition_transparent.jingoo
-   ./templates/operation_definition.jingoo ./templates/jane_object_tag.ml
+   ./templates/operation_definition.jingoo
    ./templates/module_aliases.ml.jingoo)
  (action
   (bash "%{deps} -output embedded_strings")))

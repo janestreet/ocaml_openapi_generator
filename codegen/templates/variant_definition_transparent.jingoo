@@ -1,15 +1,20 @@
 {%- autoescape false -%}
+{%- if needs_string_primitives -%}
+open! Openapi_runtime.Provide_string
+
+{% endif -%}
+
 type t =
-  {% for variant in variants %}| {{ variant.name }} of {{ variant.module }}.t
-  {% endfor %} [@@deriving sexp]
+  {% for variant in variants %}| {{ variant.name }} of {{ variant.type_reference }} {%- if to_stringable %} [@nested ""] {%- endif -%}
+  {% endfor %} [@@deriving sexp, compare {%- if to_stringable -%} , to_string {%- endif -%} ]
 
 let jsonaf_of_t = function
-  {% for variant in variants %}| {{ variant.name }} v -> {{ variant.module }}.jsonaf_of_t v
+  {% for variant in variants %}| {{ variant.name }} v -> [%jsonaf_of: {{ variant.type_reference }}] v
   {% endfor -%}
 ;;
 
 let t_of_jsonaf json =
-  {% for variant in variants %}try {{ variant.name }} ({{ variant.module }}.t_of_jsonaf json) with
+  {% for variant in variants %}try {{ variant.name }} ([%of_jsonaf: {{ variant.type_reference }}] json) with
   _ ->
   {% endfor -%}
   failwith {|{{ variant.module }} failed to parse (transparent variant)|}

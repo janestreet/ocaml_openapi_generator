@@ -1,6 +1,49 @@
+{% if additional_properties -%}
 type t =
   {
   {%- for field in fields %}
-    {{ field.name }} : {{ field.type_reference }} {%- if field.optional %} {%- if raise_on_optional_null %} [@jsonaf.option] {%- else -%} [@default None] {%- endif %} {%- else -%} {%- endif %} [@key {xxx|{{ field.api_name }}|xxx}];
+    {{ field.name }} : {{ field.type_reference }}
+    {%- if field.optional %} {%- if add_sexp_option_annotations %} [@sexp.option] {%- endif %} {%- endif %}
+    ;
   {%- endfor %}
-  } [@@deriving fields ~getters, sexp, jsonaf]
+    {{ additional_properties.field_name }} : (string * {{ additional_properties.type_reference }}) list {%- if add_sexp_option_annotations %} [@sexp.list] {%- endif %}
+  } [@@deriving fields ~getters, sexp, compare]
+
+include Openapi_runtime.Jane_with_json.With_additional_properties (struct
+  type result = t
+
+{% endif %}
+
+type t =
+  {
+  {%- for field in fields %}
+    {{ field.name }} : {{ field.type_reference }}
+    {%- if field.optional %} {%- if raise_on_optional_null %} [@jsonaf.option] {%- else -%} [@default None] {%- endif %} {%- if add_sexp_option_annotations and not additional_properties %} [@sexp.option] {%- endif %} {%- endif %}
+    {%- if field.api_name  %} [@key {{ field.api_name }}] {%- endif -%};
+  {%- endfor %}
+  } [@@deriving 
+  {% if not additional_properties %} fields ~getters, sexp, compare, {% endif %}
+
+  jsonaf{%- if capitalization %} ~capitalize:"{{ capitalization }}"{%- endif %}
+
+  {% if additional_properties %}
+  , jsonaf_fields{%- if capitalization %} ~capitalize:"{{ capitalization }}"{%- endif %}
+  , stable_record ~version:result ~add:[ {{ additional_properties.field_name }} ]
+  {% endif %}
+  ]
+  {%- if allow_extra_fields %} [@@jsonaf.allow_extra_fields] {%- endif %}
+
+{% if additional_properties %}
+  module Additional_properties_content = struct
+    type t = {{ additional_properties.type_reference }} [@@deriving jsonaf]
+  end
+
+  let to_serializable (t : result) = 
+    of_result t, t.{{ additional_properties.field_name }}
+  ;;
+
+  let of_serializable (serializable : t) {{ additional_properties.field_name }} = 
+    to_result serializable ~{{ additional_properties.field_name }}
+  ;;
+end)
+{% endif %}

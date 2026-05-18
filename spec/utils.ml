@@ -49,6 +49,6 @@ let resolve_all_parameters ~components parameters =
     let parameter =
       resolve_parameter_ref ~components parameter_or_ref |> Option.value_exn
     in
-    Parameter.Parameter_data.name (Parameter.data parameter), parameter)
-  |> Hashtbl.of_alist_exn (module String)
+    Parameter.name parameter, parameter)
+  |> String.Map.of_alist_exn
 ;;

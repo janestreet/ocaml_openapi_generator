@@ -4,4 +4,6 @@ module Name = Name
 module Operation_method = Operation_method
 module Operation_parameter = Operation_parameter
 module Operation_response = Operation_response
+module Type_description = Type_description
+module Type_mapping = Type_mapping
 module Typify = Typify

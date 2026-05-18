@@ -15,10 +15,13 @@ end
 module Operation_parameter_kind : sig
   type t =
     | Path
-    | Query of bool
+    | Query of
+        { required : bool
+        ; style : Parameter.Query_style.t
+        }
     | Header of bool
     | Body of Body_content_type.t
-  [@@deriving sexp]
+  [@@deriving sexp_of]
 end
 
 type t =
@@ -26,14 +29,16 @@ type t =
   ; description : string option
   ; type_ : Operation_parameter_type.t
   ; kind : Operation_parameter_kind.t
+  ; explode : bool option
   }
-[@@deriving fields ~getters ~setters ~iterators:create, sexp]
+[@@deriving fields ~getters ~setters ~iterators:create, sexp_of]
 
 val create
   :  name:string
   -> description:string option
   -> type_:Operation_parameter_type.t
   -> kind:Operation_parameter_kind.t
+  -> explode:bool option
   -> t
 
 val of_body

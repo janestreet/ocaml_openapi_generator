@@ -1,41 +1,37 @@
-open! Core
-open! Async
-open! Deferred.Or_error.Let_syntax
-open! Openapi_runtime.Jane_with_json
-open! Openapi_runtime.Client
+open! Async.Deferred.Or_error.Let_syntax
 open! Jsonaf.Export
+{% if needs_string_primitives -%}
+open! Openapi_runtime.Provide_string
+
+{% endif -%}
 
 module Params = struct
 {% for operation in operations -%}
   let {{ operation.operation_id }}
-      {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
+      {% for param in operation.path_parameters %}~{{ param }} {% endfor %}
       {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
       {% if operation.has_body %}~body{%- endif %}
-      ()
+      () : Openapi_runtime.Client.Params.t Core.Or_error.t
       =
+    {% if operation.query_parameters|length > 0 -%}
     let query =
-      List.filter_opt
         [{% for param in operation.query_parameters %}
          {% if param.is_required -%}
-           Some ({{ param.to_query_parameter }} ~key:{|{{ param.api_name }}|} ~value:{{ param.name }})
+           {{ param.to_query_parameter }}
          {%- else -%}
-           Option.map {{ param.name }} ~f:(fun value -> {{ param.to_query_parameter }} ~key:{|{{ param.api_name }}|} ~value)
-         {%- endif %};
+            Openapi_runtime.Query_parameters.optional ({{ param.to_query_parameter }})
+         {%- endif %} ~key:{|{{ param.api_name }}|} ~value:{{ param.name }};
          {% endfor %}]
-      |> List.concat_map
-        ~f:Openapi_runtime.Query_parameters.to_list
-    in
-    let path_template = Openapi_runtime.Path_template.t_of_sexp (Sexp.of_string {|{{ operation.operation_path }}|}) in
-    let%map.Or_error path =
-      Openapi_runtime.Path_template.render_path
-      ~parameters:(String.Map.of_alist_exn [{% for param in operation.path_parameters %}{|{{ param.api_name }}|}, {{ param.name }};{% endfor %}])
-      path_template
-      |> Result.of_option ~error:(Core.Error.of_string {|unable to render path|})
-    in
-    let body = {% if operation.has_body %}Some (Jsonaf.to_string ({{ operation.body_module }}.jsonaf_of_t body)){% else %}None{% endif %} in
-    { Params.path
-    ; query
-    ; body
+      |> Openapi_runtime.Query_parameters.concat_to_list
+    in {%- endif %}
+    let path = {%if operation.path_parameters|length > 0 -%} [%api_path {{ operation.operation_path }}] {%- else -%} {{ operation.operation_path }} {%- endif %} in
+    {% if operation.body_json_type -%}
+    let body = Jsonaf.to_string ([%jsonaf_of: {{ operation.body_json_type }}] body) in
+    {%- endif %}
+    Ok
+    { path
+    ; query {%- if operation.query_parameters|length == 0 %} = [] {%- endif %}
+    ; body {%- if operation.has_body %} = Some body {%- else %} = None {%- endif %}
     ; method_ = {{ operation.endpoint_method }}
     }
   ;;
@@ -44,28 +40,28 @@ end
 
 {% for operation in operations -%}
 let {{ operation.operation_id }}
-    {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
+    {% for param in operation.path_parameters %}~{{ param }} {% endfor %}
     {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
     {% if operation.has_body %}~body{%- endif %}
-    t
+    (t : _ Openapi_runtime.Client.t)
     =
   let%bind params =
     Params.{{ operation.operation_id }}
-    {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
+    {% for param in operation.path_parameters %}~{{ param }} {% endfor %}
     {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
     {% if operation.has_body %}~body{%- endif %}
     ()
-    |> Deferred.return
+    |> Async.Deferred.return
   in
   let%bind response = t.make_request t.metadata params in
-  {% if operation.has_response -%}
-  let%bind response = t.response_to_jsonaf response |> Deferred.return in
-  Monitor.try_with_or_error (fun () -> Deferred.return ({{ operation.response_module }}.t_of_jsonaf response))
+  {% if operation.response_json_type -%}
+  let%bind response = t.response_to_jsonaf response |> Async.Deferred.return in
+  Async.Monitor.try_with_or_error (fun () -> Async.Deferred.return ([%of_jsonaf: {{ operation.response_json_type }}] response))
   {%- elif operation.has_raw_response -%}
-  t.response_to_bytes response |> Deferred.return
+  t.response_to_bytes response |> Async.Deferred.return
   {%- else -%}
   ignore response;
-  Deferred.Or_error.ok_unit
+  Async.Deferred.Or_error.ok_unit
   {%- endif %}
 ;;
 {% endfor %}
