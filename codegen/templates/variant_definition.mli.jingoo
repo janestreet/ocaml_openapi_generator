@@ -1,0 +1,7 @@
+{%- autoescape false -%}
+{% if description %}(** {{ description }} *)
+{% endif %}type t =
+  {% for variant in variants %}| {{ variant.name }}
+  {% endfor %}{% if unknown_variant %}| {{unknown_variant}} of string
+  {% endif %}[@@deriving sexp, compare, string, jsonaf{%- for d in extra_derivers %}, {{ d }}{%- endfor %}]
+{%- endautoescape -%}

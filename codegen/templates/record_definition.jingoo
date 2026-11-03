@@ -7,7 +7,7 @@ type t =
     ;
   {%- endfor %}
     {{ additional_properties.field_name }} : (string * {{ additional_properties.type_reference }}) list {%- if add_sexp_option_annotations %} [@sexp.list] {%- endif %}
-  } [@@deriving fields ~getters, sexp, compare]
+  } [@@deriving fields ~getters, sexp, compare{%- for d in extra_derivers %}, {{ d }}{%- endfor %}]
 
 include Openapi_runtime.Jane_with_json.With_additional_properties (struct
   type result = t
@@ -25,6 +25,7 @@ type t =
   {% if not additional_properties %} fields ~getters, sexp, compare, {% endif %}
 
   jsonaf{%- if capitalization %} ~capitalize:"{{ capitalization }}"{%- endif %}
+  {%- if not additional_properties %}{%- for d in extra_derivers %}, {{ d }}{%- endfor %}{%- endif %}
 
   {% if additional_properties %}
   , jsonaf_fields{%- if capitalization %} ~capitalize:"{{ capitalization }}"{%- endif %}

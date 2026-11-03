@@ -1,0 +1,6 @@
+{%- autoescape false -%}
+{% if description %}(** {{ description }} *)
+{% endif %}type t =
+  {% for variant in variants %}| {{ variant.name }} of {{ variant.mli_type_reference }}{% if variant.description %} (** {{ variant.description }} *){% endif %}
+  {% endfor %} [@@deriving sexp, compare, jsonaf{%- for d in extra_derivers %}, {{ d }}{%- endfor %}]
+{%- endautoescape -%}

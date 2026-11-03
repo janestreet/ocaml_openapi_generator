@@ -10,12 +10,19 @@
 (rule
  (targets embedded_strings.ml embedded_strings.mli)
  (deps %{bin:ocaml-embed-file} ./templates/dune.jingoo
-   ./templates/types.ml.jingoo ./templates/type_definition.ml.jingoo
-   ./templates/operations.ml.jingoo ./templates/record_definition.jingoo
+   ./templates/types.ml.jingoo ./templates/types.mli.jingoo
+   ./templates/type_definition.ml.jingoo
+   ./templates/type_definition.mli.jingoo
+   ./templates/record_definition.jingoo
+   ./templates/record_definition.mli.jingoo
    ./templates/variant_definition.jingoo
+   ./templates/variant_definition.mli.jingoo
    ./templates/variant_definition_object.jingoo
+   ./templates/variant_definition_object.mli.jingoo
    ./templates/variant_definition_transparent.jingoo
+   ./templates/variant_definition_transparent.mli.jingoo
    ./templates/operation_definition.jingoo
+   ./templates/operation_definition.mli.jingoo
    ./templates/module_aliases.ml.jingoo)
  (action
   (bash "%{deps} -output embedded_strings")))

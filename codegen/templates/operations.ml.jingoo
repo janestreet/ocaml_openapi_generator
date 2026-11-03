@@ -1,3 +1,0 @@
-{% for endpoint in endpoints %}
-include {{ endpoint }}
-{% endfor %}

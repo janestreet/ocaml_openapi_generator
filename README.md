@@ -1,5 +1,4 @@
-"OpenAPI Generator"
-===================
+# OpenAPI Generator
 
 This is a command line tool that allows you to generate OCaml code for and inspect OpenAPI
 specifications.

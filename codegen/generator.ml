@@ -17,6 +17,37 @@ let rec append_underscores_until_no_conflict names name =
 
 let escaped_ocaml_string string = {%string|"%{String.escaped string}"|}
 
+(* Sanitizes arbitrary [description] prose from the spec so it can be embedded inside an
+   odoc [(** ... *)] comment. We neutralize the comment delimiters and escape the
+   odoc-significant characters ([\], [{], [}], [[], []], [@]) so the text renders verbatim
+   and can never break the generated interface, which is now compiled and style-checked. *)
+let escape_for_odoc text =
+  text
+  |> String.substr_replace_all ~pattern:"*)" ~with_:"* )"
+  |> String.substr_replace_all ~pattern:"(*" ~with_:"( *"
+  |> String.concat_map ~f:(fun char ->
+    match char with
+    | '\\' -> {|\\|}
+    | '{' -> {|\{|}
+    | '}' -> {|\}|}
+    | '[' -> {|\[|}
+    | ']' -> {|\]|}
+    | '@' -> {|\@|}
+    | char -> String.of_char char)
+;;
+
+(* The body of an odoc comment for [description], or [None] when descriptions are not
+   being propagated or there is nothing to say. The result does not include the
+   surrounding [(** ... *)], which the templates add. *)
+let doc_comment ~propagate_descriptions description =
+  match propagate_descriptions, description with
+  | false, _ | _, None -> None
+  | true, Some description ->
+    (match String.strip description with
+     | "" -> None
+     | description -> Some (escape_for_odoc description))
+;;
+
 module Models = struct
   module As_variable_name = struct
     type t = Name.t
@@ -72,6 +103,42 @@ module Models = struct
     let to_jingoo t = [%to_jingoo: string] (Type_description.type_name t)
   end
 
+  (* Renders a type reference for an interface. This differs from [Type_reference] because
+     interfaces should expose the public [Jsonaf.t] rather than the internal
+     [With_structural_compare.t], and should render the string-keyed map type as a plain
+     association list. *)
+  module Mli_type_reference = struct
+    type t = Type_description.t
+
+    let rec type_name (t : t) =
+      match Type_description.Identifier.to_string t.name, t.arguments with
+      | "Openapi_runtime.Jane_with_json.Assoc.M(Core.String).t", [ value ] ->
+        [%string "(string * %{type_name value}) list"]
+      | _ -> Type_description.type_name t
+    ;;
+
+    (* Flat renames that expose public-facing type names in interfaces. We deliberately do
+       not rename the [Jsonaf_ip] / [Jsonaf_ipv4] / [Jsonaf_ipv6] runtime types: they are
+       all transparent aliases of the same [Core_unix.Inet_addr.t], so collapsing them
+       would erase the IPv4/IPv6 distinction the runtime type names document. *)
+    let to_jingoo t =
+      type_name t
+      |> String.substr_replace_all
+           ~pattern:"Jsonaf.With_structural_compare.t"
+           ~with_:"Jsonaf.t"
+      |> String.substr_replace_all
+           ~pattern:"Jsonaf_kernel.With_structural_compare.t"
+           ~with_:"Jsonaf.t"
+      |> String.substr_replace_all
+           ~pattern:"Openapi_runtime.Jane_with_json.Jsonaf_time.t"
+           ~with_:"Core.Time_ns.t"
+      |> String.substr_replace_all
+           ~pattern:"Openapi_runtime.Jane_with_json.Jsonaf_uuid.t"
+           ~with_:"Uuid.t"
+      |> [%to_jingoo: string]
+    ;;
+  end
+
   module Record = struct
     module Field = struct
       type t =
@@ -79,6 +146,8 @@ module Models = struct
         ; api_name : As_ocaml_string.t option (* None if capitalization is enough *)
         ; optional : bool
         ; type_reference : Type_reference.t
+        ; mli_type_reference : Mli_type_reference.t
+        ; description : string option
         }
       [@@deriving to_jingoo]
     end
@@ -87,6 +156,7 @@ module Models = struct
       type t =
         { field_name : string
         ; type_reference : Type_reference.t
+        ; mli_type_reference : Mli_type_reference.t
         }
       [@@deriving to_jingoo]
     end
@@ -98,6 +168,8 @@ module Models = struct
       ; add_sexp_option_annotations : bool
       ; additional_properties : Additional_properties.t option
       ; allow_extra_fields : bool
+      ; extra_derivers : string list
+      ; description : string option
       }
     [@@deriving to_jingoo]
   end
@@ -116,6 +188,8 @@ module Models = struct
       ; variants : Branch.t list
       ; capitalization : Capitalization.t option
       ; unknown_variant : string option
+      ; extra_derivers : string list
+      ; description : string option
       }
     [@@deriving to_jingoo]
   end
@@ -126,6 +200,8 @@ module Models = struct
         { name : As_variant.t
         ; api_name : As_ocaml_string.t
         ; type_reference : Type_reference.t
+        ; mli_type_reference : Mli_type_reference.t
+        ; description : string option
         }
       [@@deriving to_jingoo]
     end
@@ -134,6 +210,8 @@ module Models = struct
       { module_name : As_full_module_name.t
       ; variants : Branch.t list
       ; tag : As_ocaml_string.t
+      ; extra_derivers : string list
+      ; description : string option
       }
     [@@deriving to_jingoo]
   end
@@ -143,6 +221,8 @@ module Models = struct
       type t =
         { name : As_variant.t
         ; type_reference : Type_reference.t
+        ; mli_type_reference : Mli_type_reference.t
+        ; description : string option
         }
       [@@deriving to_jingoo]
     end
@@ -152,6 +232,8 @@ module Models = struct
       ; variants : Branch.t list
       ; to_stringable : bool
       ; needs_string_primitives : bool
+      ; extra_derivers : string list
+      ; description : string option
       }
     [@@deriving to_jingoo]
   end
@@ -283,7 +365,31 @@ module Models = struct
         [%string {|Openapi_runtime.Query_parameters.object_ %{parameters} ()|}]
     ;;
 
+    let singleton_value_type ({ type_description; nullable } : Singleton_type.t) =
+      if nullable then Type_description.option type_description else type_description
+    ;;
+
+    (* The OCaml type of the value accepted for this query parameter, used to render
+       interface signatures. *)
+    let value_type = function
+      | Singleton singleton_type -> singleton_value_type singleton_type
+      | Array { element_type; structure_parameters = _ } ->
+        Type_description.list (singleton_value_type element_type)
+      | Map { element_type; structure_parameters = _ } ->
+        Type_description.string_assoc (singleton_value_type element_type)
+      | Object (_ : Structure_parameters.t) ->
+        Type_description.string_assoc Type_description.Presets.jsonaf
+    ;;
+
     let to_jingoo t = [%to_jingoo: string] (to_string t)
+  end
+
+  module Path_parameter = struct
+    type t =
+      { name : As_variable_name.t
+      ; mli_type_reference : Mli_type_reference.t
+      }
+    [@@deriving to_jingoo]
   end
 
   module Query_parameter = struct
@@ -292,6 +398,7 @@ module Models = struct
       ; api_name : As_raw_string.t
       ; is_required : bool
       ; to_query_parameter : To_query_parameter.t
+      ; mli_type_reference : Mli_type_reference.t
       }
     [@@deriving to_jingoo]
   end
@@ -310,13 +417,16 @@ module Models = struct
 
     type t =
       { operation_id : Id.t
+      ; doc_comment : string option
       ; operation_path : Path.t
       ; has_body : bool
       ; body_json_type : Type_reference.t option
+      ; body_mli_type : Mli_type_reference.t
       ; endpoint_method : Http_method.t
       ; has_raw_response : bool
       ; response_json_type : Type_reference.t option
-      ; path_parameters : As_variable_name.t list
+      ; response_mli_type : Mli_type_reference.t
+      ; path_parameters : Path_parameter.t list
       ; query_parameters : Query_parameter.t list
       }
     [@@deriving to_jingoo]
@@ -334,10 +444,6 @@ module Models = struct
       ; needs_string_primitives : bool
       }
     [@@deriving to_jingoo]
-  end
-
-  module Operations_index = struct
-    type t = { endpoints : As_truncated_module_name.t list } [@@deriving to_jingoo]
   end
 
   module Module_alias = struct
@@ -371,10 +477,6 @@ module Models = struct
     [@@deriving to_jingoo]
   end
 
-  module Module_aliases = struct
-    type t = { modules : Module_alias.t list } [@@deriving to_jingoo]
-  end
-
   module Type_definition_wrapper = struct
     type t = { module_ : string }
 
@@ -387,8 +489,16 @@ let models_of_obj_exn = function
   | _ -> failwith "models_of_obj_exn: not an object"
 ;;
 
-let capitalization_applies capitalization name =
-  let snake_case = Name.to_variable_name name in
+(* [used_as] describes how the name will be emitted, which determines the OCaml identifier
+   whose capitalization we are reasoning about. Variant constructors are capitalized, so
+   their snake-case form is never keyword-escaped; record fields (and other lowercase
+   identifiers) are escaped when they collide with a keyword, e.g. [type] -> [type_]. *)
+let capitalization_applies ?(used_as = `Variable) capitalization name =
+  let snake_case =
+    match used_as with
+    | `Variant -> String.uncapitalize (Name.to_variant name)
+    | `Variable -> Name.to_variable_name name
+  in
   let capitalization_gets_back_the_raw_string =
     String.equal
       (Name.to_raw_string name)
@@ -417,10 +527,10 @@ let capitalization_applies capitalization name =
 
    However, these types are auto-generated, so we can just change the picked
    capitalization later, so this doesn't matter as much. *)
-let pick_capitalization names =
+let pick_capitalization ?used_as names =
   let most_likely_capitalizations =
     List.map Capitalization.all ~f:(fun capitalization ->
-      List.count names ~f:(capitalization_applies capitalization), capitalization)
+      List.count names ~f:(capitalization_applies ?used_as capitalization), capitalization)
     |> List.sort ~compare:(Comparable.lift ~f:fst Int.descending)
   in
   match most_likely_capitalizations with
@@ -431,9 +541,9 @@ let pick_capitalization names =
   | _ -> None
 ;;
 
-let optional_capitalization_applies capitalization name =
+let optional_capitalization_applies ?used_as capitalization name =
   Option.exists capitalization ~f:(fun capitalization ->
-    capitalization_applies capitalization name)
+    capitalization_applies ?used_as capitalization name)
 ;;
 
 let rec type_reference ~type_id ~type_space ~maximum_filename_length =
@@ -472,20 +582,33 @@ let record_type_definition
   ~additional_properties
   ~maximum_filename_length
   ~add_sexp_option_annotations
+  ~extra_derivers
+  ~propagate_descriptions
+  ~description
   =
   let capitalization = Map.keys properties |> pick_capitalization in
   let fields =
-    Map.mapi properties ~f:(fun ~key:name ~data:(type_id, necessity) ->
-      let api_name =
-        if optional_capitalization_applies capitalization name then None else Some name
-      in
-      let type_reference = type_reference ~type_id ~type_space ~maximum_filename_length in
-      let optional, type_reference =
-        match necessity with
-        | `Required -> false, type_reference
-        | `Optional -> true, Type_description.option type_reference
-      in
-      { Models.Record.Field.name; api_name; optional; type_reference })
+    Map.mapi
+      properties
+      ~f:(fun ~key:name ~data:{ Property.type_id; necessity; description } ->
+        let api_name =
+          if optional_capitalization_applies capitalization name then None else Some name
+        in
+        let type_reference =
+          type_reference ~type_id ~type_space ~maximum_filename_length
+        in
+        let optional, type_reference =
+          match necessity with
+          | `Required -> false, type_reference
+          | `Optional -> true, Type_description.option type_reference
+        in
+        { Models.Record.Field.name
+        ; api_name
+        ; optional
+        ; type_reference
+        ; mli_type_reference = type_reference
+        ; description = doc_comment ~propagate_descriptions description
+        })
     |> Map.data
   in
   let additional_properties, allow_extra_fields =
@@ -498,6 +621,7 @@ let record_type_definition
       in
       let additional_properties =
         { Models.Record.Additional_properties.type_reference
+        ; mli_type_reference = type_reference
         ; field_name =
             append_underscores_until_no_conflict
               existing_properties
@@ -514,6 +638,8 @@ let record_type_definition
   ; additional_properties
   ; allow_extra_fields
   ; add_sexp_option_annotations
+  ; extra_derivers
+  ; description = doc_comment ~propagate_descriptions description
   }
 ;;
 
@@ -521,12 +647,17 @@ let string_variant_type_definition
   ~module_name
   ~branches
   ~include_unknown_fallback_for_enums
+  ~extra_derivers
+  ~propagate_descriptions
+  ~description
   =
-  let capitalization = pick_capitalization branches in
+  let capitalization = pick_capitalization ~used_as:`Variant branches in
   let variants =
     List.map branches ~f:(fun name ->
       let api_name =
-        if optional_capitalization_applies capitalization name then None else Some name
+        if optional_capitalization_applies ~used_as:`Variant capitalization name
+        then None
+        else Some name
       in
       { Models.String_variant.Branch.api_name; name })
   in
@@ -537,7 +668,21 @@ let string_variant_type_definition
       Some (append_underscores_until_no_conflict existing_names "Unknown"))
     else None
   in
-  { Models.String_variant.module_name; variants; capitalization; unknown_variant }
+  { Models.String_variant.module_name
+  ; variants
+  ; capitalization
+  ; unknown_variant
+  ; extra_derivers
+  ; description = doc_comment ~propagate_descriptions description
+  }
+;;
+
+(* A variant constructor's doc comment is taken from the [description] of the type it
+   wraps, since [oneOf] members are usually [$ref]s to documented component schemas. *)
+let branch_description ~type_space ~propagate_descriptions ~type_id =
+  Type_space.type_of_id ~type_id type_space
+  |> Option.bind ~f:Type.description
+  |> doc_comment ~propagate_descriptions
 ;;
 
 let object_variant_type_definition
@@ -546,13 +691,26 @@ let object_variant_type_definition
   ~branches
   ~maximum_filename_length
   ~tag
+  ~extra_derivers
+  ~propagate_descriptions
+  ~description
   =
   let variants =
     List.map branches ~f:(fun (type_id, name) ->
       let type_reference = type_reference ~type_id ~type_space ~maximum_filename_length in
-      { Models.Object_variant.Branch.api_name = name; type_reference; name })
+      { Models.Object_variant.Branch.api_name = name
+      ; type_reference
+      ; mli_type_reference = type_reference
+      ; name
+      ; description = branch_description ~type_space ~propagate_descriptions ~type_id
+      })
   in
-  { Models.Object_variant.module_name; tag = Name.of_raw_string tag; variants }
+  { Models.Object_variant.module_name
+  ; tag = Name.of_raw_string tag
+  ; variants
+  ; extra_derivers
+  ; description = doc_comment ~propagate_descriptions description
+  }
 ;;
 
 let transparent_variant_type_definition
@@ -561,11 +719,18 @@ let transparent_variant_type_definition
   ~module_name
   ~branches
   ~maximum_filename_length
+  ~extra_derivers
+  ~propagate_descriptions
+  ~description
   =
   let variants =
     List.map branches ~f:(fun (type_id, name) ->
       let type_reference = type_reference ~type_id ~type_space ~maximum_filename_length in
-      { Models.Transparent_variant.Branch.type_reference; name })
+      { Models.Transparent_variant.Branch.type_reference
+      ; mli_type_reference = type_reference
+      ; name
+      ; description = branch_description ~type_space ~propagate_descriptions ~type_id
+      })
   in
   let to_stringable = type_to_stringable ~type_id ~type_space in
   let needs_string_primitives =
@@ -577,10 +742,25 @@ let transparent_variant_type_definition
   ; variants
   ; to_stringable = type_to_stringable ~type_id ~type_space
   ; needs_string_primitives
+  ; extra_derivers
+  ; description = doc_comment ~propagate_descriptions description
   }
 ;;
 
-let type_definition
+let type_definition_template ~for_mli type_structure =
+  match type_structure, for_mli with
+  | `Record, false -> record_definition_dot_jingoo
+  | `Record, true -> record_definition_dot_mli_dot_jingoo
+  | `String_variant, false -> variant_definition_dot_jingoo
+  | `String_variant, true -> variant_definition_dot_mli_dot_jingoo
+  | `Object_variant, false -> variant_definition_object_dot_jingoo
+  | `Object_variant, true -> variant_definition_object_dot_mli_dot_jingoo
+  | `Transparent_variant, false -> variant_definition_transparent_dot_jingoo
+  | `Transparent_variant, true -> variant_definition_transparent_dot_mli_dot_jingoo
+;;
+
+let type_definition_for
+  ~for_mli
   ~type_id
   ~type_space
   ~code_gen_config:
@@ -589,12 +769,20 @@ let type_definition
     ; maximum_filename_length
     ; normalize_operation_ids = _
     ; add_sexp_option_annotations
+    ; propagate_descriptions
+    ; extra_derivers =
+        { record = extra_record_derivers
+        ; string_variant = extra_string_variant_derivers
+        ; object_variant = extra_object_variant_derivers
+        ; transparent_variant = extra_transparent_variant_derivers
+        }
     }
   =
   let maximum_filename_length =
     Option.value maximum_filename_length ~default:Name.Maximum_filename_length.default
   in
   let%bind.Option type_ = Type_space.type_of_id ~type_id type_space in
+  let description = Type.description type_ in
   match Type.structure type_ with
   | Record { properties; additional_properties } ->
     let models =
@@ -605,20 +793,31 @@ let type_definition
         ~maximum_filename_length
         ~additional_properties
         ~add_sexp_option_annotations
+        ~extra_derivers:extra_record_derivers
+        ~propagate_descriptions
+        ~description
       |> [%to_jingoo: Models.Record.t]
       |> models_of_obj_exn
     in
-    Some (Jg_template.from_string ~env ~models record_definition_dot_jingoo)
+    Some
+      (Jg_template.from_string ~env ~models (type_definition_template ~for_mli `Record))
   | String_variant branches ->
     let models =
       string_variant_type_definition
         ~branches
         ~module_name:(Type.name type_)
         ~include_unknown_fallback_for_enums
+        ~extra_derivers:extra_string_variant_derivers
+        ~propagate_descriptions
+        ~description
       |> [%to_jingoo: Models.String_variant.t]
       |> models_of_obj_exn
     in
-    Some (Jg_template.from_string ~env ~models variant_definition_dot_jingoo)
+    Some
+      (Jg_template.from_string
+         ~env
+         ~models
+         (type_definition_template ~for_mli `String_variant))
   | Object_variant (branches, tag) ->
     let models =
       object_variant_type_definition
@@ -627,10 +826,17 @@ let type_definition
         ~branches
         ~module_name:(Type.name type_)
         ~tag
+        ~extra_derivers:extra_object_variant_derivers
+        ~propagate_descriptions
+        ~description
       |> [%to_jingoo: Models.Object_variant.t]
       |> models_of_obj_exn
     in
-    Some (Jg_template.from_string ~env ~models variant_definition_object_dot_jingoo)
+    Some
+      (Jg_template.from_string
+         ~env
+         ~models
+         (type_definition_template ~for_mli `Object_variant))
   | Transparent_variant branches ->
     let models =
       transparent_variant_type_definition
@@ -639,11 +845,22 @@ let type_definition
         ~branches
         ~module_name:(Type.name type_)
         ~type_id
+        ~extra_derivers:extra_transparent_variant_derivers
+        ~propagate_descriptions
+        ~description
       |> [%to_jingoo: Models.Transparent_variant.t]
       |> models_of_obj_exn
     in
-    Some (Jg_template.from_string ~env ~models variant_definition_transparent_dot_jingoo)
+    Some
+      (Jg_template.from_string
+         ~env
+         ~models
+         (type_definition_template ~for_mli `Transparent_variant))
   | Existing_type _ | List _ | Nullable _ | Map _ -> None
+;;
+
+let type_definition ~type_id ~type_space ~code_gen_config =
+  type_definition_for ~for_mli:false ~type_id ~type_space ~code_gen_config
 ;;
 
 let get_type_names ~type_space ~maximum_filename_length =
@@ -660,6 +877,8 @@ let get_type_names ~type_space ~maximum_filename_length =
           ; maximum_filename_length = None
           ; normalize_operation_ids = true
           ; add_sexp_option_annotations = false
+          ; propagate_descriptions = false
+          ; extra_derivers = Config.Code_gen.Extra_derivers.empty
           }
       (* None of this matters, we just want to see if the type generates a new file *)
     in
@@ -671,12 +890,12 @@ let get_type_names ~type_space ~maximum_filename_length =
     })
 ;;
 
-let make_type_mls ~type_space ~code_gen_config =
+let make_type_files ~for_mli ~type_space ~code_gen_config =
   let type_space_map = Type_space.to_map type_space in
   Map.to_alist type_space_map
   |> List.map ~f:(fun (type_id, type_) -> type_id, Type.name type_)
   |> List.map ~f:(fun (type_id, type_name) ->
-    type_definition ~type_id ~type_space ~code_gen_config, type_name)
+    type_definition_for ~for_mli ~type_id ~type_space ~code_gen_config, type_name)
   |> List.filter_map ~f:(fun (type_definition, type_name) ->
     match type_definition with
     | None -> None
@@ -687,10 +906,21 @@ let make_type_mls ~type_space ~code_gen_config =
       |> [%to_jingoo: Models.Type_definition_wrapper.t]
       |> models_of_obj_exn
     in
-    let definition_str =
-      Jg_template.from_string ~env ~models type_definition_dot_ml_dot_jingoo
+    let template =
+      if for_mli
+      then type_definition_dot_mli_dot_jingoo
+      else type_definition_dot_ml_dot_jingoo
     in
+    let definition_str = Jg_template.from_string ~env ~models template in
     definition_str, type_name)
+;;
+
+let make_type_mls ~type_space ~code_gen_config =
+  make_type_files ~for_mli:false ~type_space ~code_gen_config
+;;
+
+let make_type_mlis ~type_space ~code_gen_config =
+  make_type_files ~for_mli:true ~type_space ~code_gen_config
 ;;
 
 let generate_to_query_parameter
@@ -742,11 +972,16 @@ let generate_to_query_parameter
      | _ -> None)
 ;;
 
+let type_description_of_string string =
+  Type_description.create (Type_description.Identifier.of_string string)
+;;
+
 let operation_model
   ~operation
   ~type_space
   ~maximum_filename_length
   ~normalize_operation_ids
+  ~propagate_descriptions
   =
   let operation_id = Operation_method.operation_id operation in
   let operation_parameters = Operation_method.parameters operation in
@@ -787,7 +1022,8 @@ let operation_model
   let path_parameters =
     List.filter_map operation_path ~f:(function
       | Constant _ -> None
-      | Parameter { name; _ } -> Some name)
+      | Parameter { name; type_reference } ->
+        Some { Models.Path_parameter.name; mli_type_reference = type_reference })
   in
   let query_parameters =
     operation_parameters
@@ -804,6 +1040,7 @@ let operation_model
       ; api_name = Operation_parameter.name param
       ; is_required
       ; to_query_parameter
+      ; mli_type_reference = Models.To_query_parameter.value_type to_query_parameter
       })
   in
   let body_json_type =
@@ -811,6 +1048,9 @@ let operation_model
     match Operation_parameter.type_ body with
     | Type type_id -> Some (type_reference ~type_id ~type_space ~maximum_filename_length)
     | Raw_body -> None
+  in
+  let body_mli_type =
+    Option.value body_json_type ~default:(type_description_of_string "string")
   in
   let operation_response =
     Operation_response.get_success_response_for_operation
@@ -824,45 +1064,94 @@ let operation_model
     | Raw -> None, true
     | _ -> None, false
   in
+  let response_mli_type =
+    match response_json_type, has_raw_response with
+    | Some response_json_type, false -> response_json_type
+    | None, true ->
+      type_description_of_string "Openapi_runtime.Client.Content_type_and_bytes.t"
+    | Some (_ : Type_description.t), true ->
+      raise_s [%message "OpenAPI response cannot be both JSON and raw"]
+    | None, false -> type_description_of_string "unit"
+  in
+  let doc_comment =
+    let summary =
+      doc_comment
+        ~propagate_descriptions
+        (match Operation_method.description operation with
+         | Some _ as description -> description
+         | None -> Operation_method.summary operation)
+    in
+    let signature_param_labels =
+      List.concat
+        [ List.map path_parameters ~f:(fun param -> Name.to_variable_name param.name)
+        ; List.map query_parameters ~f:(fun param -> Name.to_variable_name param.name)
+        ; (match body with
+           | None -> []
+           | Some (_ : Operation_parameter.t) -> [ "body" ])
+        ]
+      |> String.Set.of_list
+    in
+    let param_lines =
+      List.filter_map operation_parameters ~f:(fun param ->
+        let label =
+          match Operation_parameter.kind param with
+          | Header _ -> None
+          | Body _ -> Some "body"
+          | Path | Query _ ->
+            Some (Name.to_variable_name (Operation_parameter.name param))
+        in
+        let%bind.Option label in
+        let%bind.Option () = Option.some_if (Set.mem signature_param_labels label) () in
+        let%map.Option description =
+          doc_comment ~propagate_descriptions (Operation_parameter.description param)
+        in
+        let description =
+          String.split_lines description
+          |> List.map ~f:String.strip
+          |> String.concat ~sep:" "
+        in
+        [%string "@param %{label} %{description}"])
+    in
+    match summary, param_lines with
+    | None, [] -> None
+    | _ -> Some (String.concat ~sep:"\n\n" (Option.to_list summary @ param_lines))
+  in
   let operation_id : Models.Operation.Id.t =
     if normalize_operation_ids
     then Normalized (Name.of_raw_string operation_id)
     else As_is operation_id
   in
   { Models.Operation.operation_id
+  ; doc_comment
   ; operation_path
   ; has_body = Option.is_some body
   ; body_json_type
+  ; body_mli_type
   ; endpoint_method = operation_method
   ; has_raw_response
   ; response_json_type
+  ; response_mli_type
   ; path_parameters
   ; query_parameters
   }
 ;;
 
-let make_operations_ml ~operation_lists ~maximum_filename_length =
-  let models =
-    [%to_jingoo: Models.Operations_index.t]
-      { endpoints =
-          List.map operation_lists ~f:(fun (name, _) ->
-            { Models.As_truncated_module_name.name; maximum_filename_length })
-      }
-    |> models_of_obj_exn
-  in
-  Jg_template.from_string ~env ~models operations_dot_ml_dot_jingoo
-;;
-
-let make_types_ml ~types =
+let make_types ~for_mli ~types =
   let models = [%to_jingoo: Models.Types_index.t] { types } |> models_of_obj_exn in
-  Jg_template.from_string ~env ~models types_dot_ml_dot_jingoo
+  let template = if for_mli then types_dot_mli_dot_jingoo else types_dot_ml_dot_jingoo in
+  Jg_template.from_string ~env ~models template
 ;;
 
-let make_operation_definition_ml
+let make_types_ml = make_types ~for_mli:false
+let make_types_mli = make_types ~for_mli:true
+
+let make_operation_definition
+  ~for_mli
   ~operation_list
   ~type_space
   ~maximum_filename_length
   ~normalize_operation_ids
+  ~propagate_descriptions
   =
   let operations =
     List.map operation_list ~f:(fun operation ->
@@ -870,7 +1159,8 @@ let make_operation_definition_ml
         ~operation
         ~type_space
         ~maximum_filename_length
-        ~normalize_operation_ids)
+        ~normalize_operation_ids
+        ~propagate_descriptions)
   in
   let models =
     { Models.Operation_definition.operations
@@ -880,8 +1170,20 @@ let make_operation_definition_ml
     |> [%to_jingoo: Models.Operation_definition.t]
     |> models_of_obj_exn
   in
-  Jg_template.from_string ~env ~models operation_definition_dot_jingoo
+  let template =
+    if for_mli
+    then operation_definition_dot_mli_dot_jingoo
+    else operation_definition_dot_jingoo
+  in
+  Jg_template.from_string ~env ~models template
 ;;
+
+(* The [.ml] never carries doc comments; descriptions are an interface-only concern. *)
+let make_operation_definition_ml =
+  make_operation_definition ~for_mli:false ~propagate_descriptions:false
+;;
+
+let make_operation_definition_mli = make_operation_definition ~for_mli:true
 
 let make_jbuild ~(config : Config.t) ~paths =
   let paths = Set.to_list paths in
@@ -950,21 +1252,11 @@ let make_operation_method_list ~type_space ~paths ~components =
   List.concat_map operation_lists ~f:snd, type_space
 ;;
 
-let make_module_aliases_ml
-  ~(operation_lists : (Name.t * Operation_method.t list) list)
-  ~type_space
-  ~maximum_filename_length
-  =
-  let type_names = get_type_names ~type_space ~maximum_filename_length in
-  let modules =
-    List.map operation_lists ~f:(fun (operation_path, _) ->
-      { Models.Module_alias.nice_name = operation_path
-      ; real_name = { name = operation_path; maximum_filename_length }
-      })
-    @ type_names
-  in
-  let models = [%to_jingoo: Models.Module_aliases.t] { modules } |> models_of_obj_exn in
-  Jg_template.from_string ~env ~models module_aliases_dot_ml_dot_jingoo
+(* The library's main module exposes only [Types], [Params], and [Operations]. The
+   individual type and endpoint modules are reached through those, so we no longer alias
+   them here. [Types] is [include]d so that types are not prefixed for clients. *)
+let make_module_aliases_ml () =
+  Jg_template.from_string ~env ~models:[] module_aliases_dot_ml_dot_jingoo
 ;;
 
 let non_colliding_operation_name names proposal ~maximum_filename_length =
@@ -986,8 +1278,25 @@ let non_colliding_operation_name names proposal ~maximum_filename_length =
   else proposal
 ;;
 
-(* The operation list module names are purely used to write to a file. Let us just rename
-   them to something unique if it collides with a type name. *)
+(* The constant segments of a path, as module names. Parameter segments are dropped: they
+   become function arguments rather than module levels (e.g. [/store/order/{orderId}] has
+   segments [Store; Order]). These determine where the endpoint attaches in the operation
+   tree. *)
+let path_segments path =
+  Name.to_raw_string path
+  |> Openapi_runtime.Path_template.of_template_string
+  |> Option.value ~default:[]
+  |> List.filter_map ~f:(function
+    | Openapi_runtime.Path_template.Path_component.Constant "" -> None
+    | Constant segment -> Some (Name.of_raw_string segment)
+    | Parameter _ -> None)
+;;
+
+(* Each endpoint gets a [real_name]: the file (and file-module) name. It must be unique
+   across both the endpoint files and the generated type files, so it is suffixed with
+   [_operations] (and possibly a number) on collision. The endpoint's path segments
+   determine where it is exposed in the operation tree built by [operations.ml] /
+   [params.ml]. *)
 let disambiguate_names (operation_lists, type_space) ~maximum_filename_length =
   let type_names =
     Type_space.to_map type_space |> Map.data |> List.map ~f:Typify.Type.name
@@ -997,21 +1306,155 @@ let disambiguate_names (operation_lists, type_space) ~maximum_filename_length =
     List.fold
       operation_lists
       ~init:(operation_names, [])
-      ~f:(fun (operation_names, operation_lists) (path, operations) ->
+      ~f:(fun (operation_names, new_operation_lists) (path, operations) ->
         let operation_names_without_current =
           List.filter operation_names ~f:(Fn.non (Name.equal path))
         in
-        let new_operation_name =
+        let real_name =
           non_colliding_operation_name
             (type_names @ operation_names_without_current)
             path
             ~maximum_filename_length
         in
-        ( new_operation_name :: operation_names_without_current
-        , (new_operation_name, operations) :: operation_lists ))
+        ( real_name :: operation_names_without_current
+        , (real_name, path_segments path, operations) :: new_operation_lists ))
   in
   (* preserve original order *)
   List.rev new_operation_lists, type_space
+;;
+
+(* A tree mirroring the URL path hierarchy. Each constant path segment is a module level;
+   parameter segments are collapsed (they become function arguments). Multiple endpoints
+   can attach at the same node (e.g. [/store/order] and [/store/order/{orderId}] both
+   attach at [Store.Order]), and a node can both carry operations and have children. The
+   tree is rendered into [operations.ml] / [params.ml] as nested modules that expose each
+   endpoint file's [Operations] / [Params] submodule. *)
+module Operation_tree = struct
+  type t =
+    { attached : (Name.t * Operation_method.t list) list
+        (* endpoint file modules whose submodule is exposed at this node *)
+    ; children : t Map.M(String).t (* keyed by child segment module name *)
+    }
+
+  let empty = { attached = []; children = String.Map.empty }
+  let segment_module_name segment = Name.to_module_name segment ~kind:`Full
+
+  let rec insert t segments entry =
+    match segments with
+    | [] -> { t with attached = t.attached @ [ entry ] }
+    | segment :: rest ->
+      let key = segment_module_name segment in
+      let existing = Map.find t.children key |> Option.value ~default:empty in
+      let child = insert existing rest entry in
+      { t with children = Map.set t.children ~key ~data:child }
+  ;;
+
+  let of_entries entries =
+    List.fold entries ~init:empty ~f:(fun t (real_name, segments, operations) ->
+      insert t segments (real_name, operations))
+  ;;
+
+  let operation_function_name ~normalize_operation_ids operation =
+    let operation_id = Operation_method.operation_id operation in
+    if normalize_operation_ids
+    then Name.to_variable_name (Name.of_raw_string operation_id)
+    else operation_id
+  ;;
+
+  (* Operations attaching at the same node are exposed in the same module, so their
+     function names must be unique within that node. This can only be violated by a spec
+     with non-unique operationIds, or by [-normalize-operation-ids] mapping two distinct
+     ids to the same OCaml identifier; we fail loudly rather than silently shadow. *)
+  let check_no_collisions t ~normalize_operation_ids =
+    let rec check ~path { attached; children } =
+      let names_with_ids =
+        List.concat_map attached ~f:(fun (_real_name, operations) ->
+          List.map operations ~f:(fun operation ->
+            ( operation_function_name ~normalize_operation_ids operation
+            , Operation_method.operation_id operation )))
+      in
+      (match
+         List.find_a_dup names_with_ids ~compare:(Comparable.lift String.compare ~f:fst)
+       with
+       | None -> ()
+       | Some (function_name, _) ->
+         let module_path =
+           if List.is_empty path then "<root>" else String.concat ~sep:"." (List.rev path)
+         in
+         let colliding_operation_ids =
+           List.filter_map names_with_ids ~f:(fun (name, operation_id) ->
+             Option.some_if (String.equal name function_name) operation_id)
+         in
+         raise_s
+           [%message
+             "Multiple operations map to the same function name within a single \
+              operations module. Disambiguate the colliding operationIds in the spec."
+               (module_path : string)
+               (function_name : string)
+               (colliding_operation_ids : string list)]);
+      Map.iteri children ~f:(fun ~key ~data -> check ~path:(key :: path) data)
+    in
+    check ~path:[] t
+  ;;
+
+  let render t ~submodule ~for_mli ~maximum_filename_length =
+    let module_ref real_name =
+      [%string
+        "%{Name.to_module_name real_name ~kind:(`Truncated \
+         maximum_filename_length)}.%{submodule}"]
+    in
+    let rec render_body { attached; children } =
+      let includes =
+        List.map attached ~f:(fun (real_name, _operations) ->
+          if for_mli
+          then [%string "include module type of %{module_ref real_name}"]
+          else [%string "include %{module_ref real_name}"])
+      in
+      let child_modules =
+        Map.to_alist children
+        |> List.map ~f:(fun (key, subtree) -> render_child ~key subtree)
+      in
+      String.concat ~sep:"\n" (includes @ child_modules)
+    and render_child ~key subtree =
+      match subtree.attached, Map.is_empty subtree.children with
+      | [ (real_name, _operations) ], true ->
+        (* A single endpoint with no children: expose it directly as an alias. *)
+        [%string "module %{key} = %{module_ref real_name}"]
+      | _ ->
+        let body = render_body subtree in
+        if for_mli
+        then [%string "module %{key} : sig\n%{body}\nend"]
+        else [%string "module %{key} = struct\n%{body}\nend"]
+    in
+    render_body t
+  ;;
+end
+
+(* Renders the [operations.ml] (or [.mli]) index for a spec: builds the operation tree,
+   checks for node-level name collisions (raising on failure), and renders it. Shared by
+   [make_files] via [Operation_tree] and exposed for testing the tree/collision logic. *)
+let make_operations_index
+  ~type_space
+  ~paths
+  ~components
+  ~maximum_filename_length
+  ~normalize_operation_ids
+  ~for_mli
+  =
+  let operation_lists, (_ : Type_space.t) =
+    make_operation_method_lists ~type_space ~paths ~components
+    |> disambiguate_names ~maximum_filename_length
+  in
+  let tree = Operation_tree.of_entries operation_lists in
+  Operation_tree.check_no_collisions tree ~normalize_operation_ids;
+  Operation_tree.render tree ~submodule:"Operations" ~for_mli ~maximum_filename_length
+;;
+
+let write_file ~temp_dir rel_path contents =
+  let filepath = Filename.of_parts [ temp_dir; String.lowercase rel_path ] in
+  Writer.with_file filepath ~f:(fun writer ->
+    Writer.write writer contents;
+    Deferred.return ())
 ;;
 
 let make_files ~config ~api =
@@ -1030,84 +1473,95 @@ let make_files ~config ~api =
       ~default:Name.Maximum_filename_length.default
   in
   let components = Open_api.components api in
-  let files_written = Hash_set.create (module String) in
   let temp_dir = Filename_unix.temp_dir "openapi_generator" name ~in_dir:destination in
-  let mkpath rel_path =
-    Hash_set.add files_written rel_path;
-    Filename.of_parts [ temp_dir; String.lowercase rel_path ]
-  in
   let type_space = Openapi_codegen_ir.Typify.Type_space.empty in
   let paths = Open_api.paths api in
   let operation_lists, type_space =
     make_operation_method_lists ~type_space ~paths ~components
     |> disambiguate_names ~maximum_filename_length
   in
+  let normalize_operation_ids = code_gen_config.normalize_operation_ids in
+  let operation_tree = Operation_tree.of_entries operation_lists in
+  Operation_tree.check_no_collisions operation_tree ~normalize_operation_ids;
+  let render_operation_index ~submodule ~for_mli =
+    Operation_tree.render operation_tree ~submodule ~for_mli ~maximum_filename_length
+  in
+  let operation_files =
+    List.concat_map operation_lists ~f:(fun (real_name, _segments, operation_list) ->
+      let filename = Name.to_filename ~maximum_filename_length real_name in
+      [ ( filename
+        , make_operation_definition_ml
+            ~operation_list
+            ~type_space
+            ~maximum_filename_length
+            ~normalize_operation_ids )
+      ; ( Filename.chop_extension filename ^ ".mli"
+        , make_operation_definition_mli
+            ~operation_list
+            ~type_space
+            ~maximum_filename_length
+            ~normalize_operation_ids
+            ~propagate_descriptions:code_gen_config.propagate_descriptions )
+      ])
+  in
+  let type_files ~extension files =
+    List.map files ~f:(fun (contents, type_name) ->
+      let ml_filename = Name.to_filename type_name ~maximum_filename_length in
+      Filename.chop_extension ml_filename ^ extension, contents)
+  in
+  let types = get_type_names ~type_space ~maximum_filename_length in
+  let files_to_write =
+    List.concat
+      [ operation_files
+      ; type_files ~extension:".ml" (make_type_mls ~type_space ~code_gen_config)
+      ; type_files ~extension:".mli" (make_type_mlis ~type_space ~code_gen_config)
+      ; [ "types.ml", make_types_ml ~types
+        ; "types.mli", make_types_mli ~types
+        ; "operations.ml", render_operation_index ~submodule:"Operations" ~for_mli:false
+        ; "operations.mli", render_operation_index ~submodule:"Operations" ~for_mli:true
+        ; "params.ml", render_operation_index ~submodule:"Params" ~for_mli:false
+        ; "params.mli", render_operation_index ~submodule:"Params" ~for_mli:true
+          (* The module aliases file is the library's main module, which is exempt from
+             [mlis_are_mandatory], so it does not get an interface. *)
+        ; name ^ ".ml", make_module_aliases_ml ()
+        ]
+      ]
+  in
+  let written_files = List.map files_to_write ~f:fst in
   let%bind.Deferred () =
     Deferred.List.iter
-      operation_lists
       ~how:(`Max_concurrent_jobs 16)
-      ~f:(fun (key, operation_list) ->
-        let filename = Name.to_filename ~maximum_filename_length key in
-        Writer.with_file (mkpath filename) ~f:(fun writer ->
-          Writer.write
-            writer
-            (make_operation_definition_ml
-               ~operation_list
-               ~type_space
-               ~maximum_filename_length
-               ~normalize_operation_ids:code_gen_config.normalize_operation_ids);
-          Deferred.return ()))
-  in
-  let%bind.Deferred () =
-    Writer.with_file
-      (mkpath (name ^ ".ml"))
-      ~f:(fun writer ->
-        Writer.write
-          writer
-          (make_module_aliases_ml ~operation_lists ~type_space ~maximum_filename_length);
-        Deferred.return ())
-  in
-  let%bind.Deferred () =
-    Writer.with_file (mkpath "operations.ml") ~f:(fun writer ->
-      Writer.write writer (make_operations_ml ~operation_lists ~maximum_filename_length);
-      Deferred.return ())
-  in
-  let%bind.Deferred () =
-    let files_to_write = make_type_mls ~type_space ~code_gen_config in
-    Deferred.List.iter
-      ~how:`Sequential
       files_to_write
-      ~f:(fun (file_contents, filename) ->
-        Writer.with_file
-          (mkpath (Name.to_filename filename ~maximum_filename_length))
-          ~f:(fun writer ->
-            Writer.write writer file_contents;
-            Deferred.return ()))
-  in
-  let%bind.Deferred () =
-    Writer.with_file (mkpath "types.ml") ~f:(fun writer ->
-      Writer.write
-        writer
-        (make_types_ml ~types:(get_type_names ~type_space ~maximum_filename_length));
-      Deferred.return ())
+      ~f:(fun (file, contents) -> write_file ~temp_dir file contents)
   in
   let%bind.Deferred () =
     match generated_files_archive with
     | None -> return ()
     | Some archive_name ->
+      let files_in_archive = List.sort written_files ~compare:String.compare in
       Process.run_exn
         ~working_dir:temp_dir
         ~prog:"tar"
         ~args:
-          ("-cvf" :: archive_name :: "--remove-files" :: Hash_set.to_list files_written)
+          ([ "--format=gnu"
+           ; "--sort=name"
+           ; "--mtime=@0"
+           ; "--owner=0"
+           ; "--group=0"
+           ; "--numeric-owner"
+           ; "--mode=0644"
+           ; "--remove-files"
+           ; "-c"
+           ; "-f"
+           ; archive_name
+           ]
+           @ files_in_archive)
         ()
       |> Deferred.ignore_m
   in
-  let paths = Set.of_hash_set (module String) files_written in
+  let paths = String.Set.of_list written_files in
   let%bind.Deferred () =
-    Writer.with_file (mkpath jbuild_corrected_file) ~f:(fun writer ->
-      Writer.write writer (make_jbuild ~config ~paths);
-      Deferred.return ())
+    write_file ~temp_dir jbuild_corrected_file (make_jbuild ~config ~paths)
   in
   let%bind.Deferred generated_files = Sys.ls_dir temp_dir in
   let%bind.Deferred () =

@@ -1,8 +1,5 @@
 {%- autoescape false -%}
 module Operations = Operations
-module Types = Types
-
-{% for module in modules %}
-module {{ module.nice_name }} = {{ module.real_name }}
-{% endfor %}
+module Params = Params
+include Types
 {%- endautoescape -%}

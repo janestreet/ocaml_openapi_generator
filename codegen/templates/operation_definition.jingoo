@@ -8,7 +8,7 @@ open! Openapi_runtime.Provide_string
 module Params = struct
 {% for operation in operations -%}
   let {{ operation.operation_id }}
-      {% for param in operation.path_parameters %}~{{ param }} {% endfor %}
+      {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
       {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
       {% if operation.has_body %}~body{%- endif %}
       () : Openapi_runtime.Client.Params.t Core.Or_error.t
@@ -38,30 +38,32 @@ module Params = struct
   {% endfor %}
 end
 
+module Operations = struct
 {% for operation in operations -%}
-let {{ operation.operation_id }}
-    {% for param in operation.path_parameters %}~{{ param }} {% endfor %}
-    {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
-    {% if operation.has_body %}~body{%- endif %}
-    (t : _ Openapi_runtime.Client.t)
-    =
-  let%bind params =
-    Params.{{ operation.operation_id }}
-    {% for param in operation.path_parameters %}~{{ param }} {% endfor %}
-    {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
-    {% if operation.has_body %}~body{%- endif %}
-    ()
-    |> Async.Deferred.return
-  in
-  let%bind response = t.make_request t.metadata params in
-  {% if operation.response_json_type -%}
-  let%bind response = t.response_to_jsonaf response |> Async.Deferred.return in
-  Async.Monitor.try_with_or_error (fun () -> Async.Deferred.return ([%of_jsonaf: {{ operation.response_json_type }}] response))
-  {%- elif operation.has_raw_response -%}
-  t.response_to_bytes response |> Async.Deferred.return
-  {%- else -%}
-  ignore response;
-  Async.Deferred.Or_error.ok_unit
-  {%- endif %}
-;;
+  let {{ operation.operation_id }}
+      {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
+      {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
+      {% if operation.has_body %}~body{%- endif %}
+      (t : _ Openapi_runtime.Client.t)
+      =
+    let%bind params =
+      Params.{{ operation.operation_id }}
+      {% for param in operation.path_parameters %}~{{ param.name }} {% endfor %}
+      {%for param in operation.query_parameters %} {% if param.is_required -%} ~{{ param.name }} {%- else -%} ?{{ param.name }} {%- endif %} {% endfor %}
+      {% if operation.has_body %}~body{%- endif %}
+      ()
+      |> Async.Deferred.return
+    in
+    let%bind response = t.make_request t.metadata params in
+    {% if operation.response_json_type -%}
+    let%bind response = t.response_to_jsonaf response |> Async.Deferred.return in
+    Async.Monitor.try_with_or_error (fun () -> Async.Deferred.return ([%of_jsonaf: {{ operation.response_json_type }}] response))
+    {%- elif operation.has_raw_response -%}
+    t.response_to_bytes response |> Async.Deferred.return
+    {%- else -%}
+    ignore response;
+    Async.Deferred.Or_error.ok_unit
+    {%- endif %}
+  ;;
 {% endfor %}
+end

@@ -1,0 +1,4 @@
+(library
+ (name openapi_path_template)
+ (public_name ocaml_openapi_generator.openapi_path_template)
+ (preprocess no_preprocessing))

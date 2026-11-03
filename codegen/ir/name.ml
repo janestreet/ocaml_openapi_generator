@@ -93,67 +93,15 @@ let%expect_test "Test to_snake_case" =
   [%expect {| some_uppercased_snake_case_string |}]
 ;;
 
+(* Escapes a value-level identifier (a variable, record field, or function argument) that
+   collides with an OCaml keyword by appending an underscore (e.g. [open] -> [open_]).
+   This is only used for lowercase identifiers; capitalized names (variant constructors,
+   module names) and file names are never keyword-escaped. *)
+let escape_if_ocaml_keyword string =
+  if Astlib.Keyword.is_keyword string then string ^ "_" else string
+;;
+
 let of_raw_string raw_string =
-  (* List of OCaml reserved keywords *)
-  let keywords =
-    [ "and"
-    ; "as"
-    ; "assert"
-    ; "asr"
-    ; "begin"
-    ; "class"
-    ; "constraint"
-    ; "do"
-    ; "done"
-    ; "downto"
-    ; "else"
-    ; "end"
-    ; "exception"
-    ; "external"
-    ; "false"
-    ; "for"
-    ; "fun"
-    ; "function"
-    ; "functor"
-    ; "if"
-    ; "in"
-    ; "include"
-    ; "inherit"
-    ; "initializer"
-    ; "land"
-    ; "lazy"
-    ; "let"
-    ; "lor"
-    ; "lsl"
-    ; "lsr"
-    ; "lxor"
-    ; "match"
-    ; "method"
-    ; "mod"
-    ; "module"
-    ; "mutable"
-    ; "new"
-    ; "nonrec"
-    ; "object"
-    ; "of"
-    ; "open"
-    ; "or"
-    ; "private"
-    ; "rec"
-    ; "sig"
-    ; "struct"
-    ; "then"
-    ; "to"
-    ; "true"
-    ; "try"
-    ; "type"
-    ; "val"
-    ; "virtual"
-    ; "when"
-    ; "while"
-    ; "with"
-    ]
-  in
   let transform_char_if_illegal c =
     let is_legal = Char.is_alphanum c || Char.equal c '_' in
     if is_legal
@@ -182,10 +130,7 @@ let of_raw_string raw_string =
     | s when String.for_all s ~f:(Char.equal '_') -> "dashes_only_"
     | _ -> ""
   in
-  let extra_suffix =
-    if List.mem keywords snake_case_str ~equal:String.equal then "_" else ""
-  in
-  let sanitized_string = extra_prefix ^ snake_case_str ^ extra_suffix in
+  let sanitized_string = extra_prefix ^ snake_case_str in
   { raw = raw_string; sanitized = sanitized_string }
 ;;
 
@@ -225,8 +170,11 @@ let to_module_name { sanitized; _ } ~kind =
     |> String.capitalize
 ;;
 
+(* Variant constructors and module names are capitalized, so they can never collide with
+   an OCaml keyword and are deliberately not keyword-escaped. Only [to_variable_name]
+   produces a lowercase value-level identifier that needs escaping. *)
 let to_variant { sanitized; _ } = capitalize sanitized
-let to_variable_name { sanitized; _ } = sanitized
+let to_variable_name { sanitized; _ } = escape_if_ocaml_keyword sanitized
 let to_raw_string { raw; _ } = raw
 
 let to_filename { sanitized; _ } ~maximum_filename_length =
