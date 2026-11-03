@@ -26,13 +26,22 @@ module Variant_structures = struct
   [@@deriving sexp]
 end
 
+module Property = struct
+  type t =
+    { type_id : Type_id.t
+    ; necessity : [ `Required | `Optional ]
+    ; description : string option
+    }
+  [@@deriving sexp]
+end
+
 module Type_structure = struct
   type t =
     | String_variant of Name.t list
     | Object_variant of (Type_id.t * Name.t) list * string
     | Transparent_variant of (Type_id.t * Name.t) list
     | Record of
-        { properties : (Type_id.t * [ `Required | `Optional ]) Name.Map.t
+        { properties : Property.t Name.Map.t
         ; additional_properties : [ `Not_allowed | `Explicit of Type_id.t | `Allowed ]
         }
     | List of Type_id.t
@@ -97,11 +106,12 @@ module Type = struct
   type t =
     { name : Name.t
     ; structure : Type_structure.t
+    ; description : string option
     }
   [@@deriving fields ~getters ~setters ~iterators:create, sexp]
 
-  let create ~name ~structure () =
-    Fields.create ~name:(Name.of_raw_string name) ~structure
+  let create ?description ~name ~structure () =
+    Fields.create ~name:(Name.of_raw_string name) ~structure ~description
   ;;
 end
 
@@ -217,10 +227,12 @@ module Type_space = struct
       let collect_possible_object_tags type_id =
         match type_of_id ~type_id t with
         | Some { structure = Record { properties; _ }; _ } ->
-          Map.filter_map properties ~f:(fun (type_id, optionality) ->
-            match optionality with
-            | `Required -> check_unique_string_enum type_id
-            | `Optional -> None)
+          Map.filter_map
+            properties
+            ~f:(fun { Property.type_id; necessity; description = _ } ->
+              match necessity with
+              | `Required -> check_unique_string_enum type_id
+              | `Optional -> None)
         | _ -> Name.Map.empty
       in
       let candidates =
@@ -478,12 +490,14 @@ module Type_space = struct
                      \"%{other_json_structure}\", which is not a string."])
           in
           let variant_names = List.rev_map string_variants ~f:Name.of_raw_string in
+          let description = Schema.description schema in
           (match is_nullable with
            | false ->
-             Type.create ~name ~structure:(String_variant variant_names) () |> add_type ~t
+             Type.create ?description ~name ~structure:(String_variant variant_names) ()
+             |> add_type ~t
            | true ->
              let non_nullable, t =
-               Type.create ~name ~structure:(String_variant variant_names) ()
+               Type.create ?description ~name ~structure:(String_variant variant_names) ()
                |> add_type ~t
              in
              make_nullable ~name ~t non_nullable)
@@ -514,10 +528,15 @@ module Type_space = struct
                   then `Required
                   else `Optional
                 in
+                let description =
+                  match schema with
+                  | Or_reference.Value schema -> Schema.description schema
+                  | Or_reference.Ref _ -> None
+                in
                 ( Map.add_exn
                     properties_map
                     ~key:(Name.of_raw_string key)
-                    ~data:(new_type, necessity)
+                    ~data:{ Property.type_id = new_type; necessity; description }
                 , t ))
           in
           let t, additional_properties =
@@ -535,7 +554,8 @@ module Type_space = struct
             | Some `Not_allowed -> t, `Not_allowed
           in
           let structure = Record { properties; additional_properties } in
-          Type.create ~name ~structure () |> add_type ~t
+          Type.create ?description:(Schema.description schema) ~name ~structure ()
+          |> add_type ~t
         | ( { type_ = Some Object; additional_properties = Some (`Allowed schema); _ }
           , Some name
           , _ ) ->
@@ -609,15 +629,27 @@ module Type_space = struct
                List.map members_list ~f:(fun (type_id, _) ->
                  Map.find_exn mapping type_id |> Name.of_raw_string)
              in
-             Type.create ~name ~structure:(String_variant variant_strings) ()
+             Type.create
+               ?description:(Schema.description schema)
+               ~name
+               ~structure:(String_variant variant_strings)
+               ()
              |> add_type ~t
            | Some (Tagged_object { tag; values }) ->
              let t, child_types = maybe_rename values in
-             Type.create ~name ~structure:(Object_variant (child_types, tag)) ()
+             Type.create
+               ?description:(Schema.description schema)
+               ~name
+               ~structure:(Object_variant (child_types, tag))
+               ()
              |> add_type ~t
            | Some (Transparent_object { names }) ->
              let t, child_types = maybe_rename names in
-             Type.create ~name ~structure:(Transparent_variant child_types) ()
+             Type.create
+               ?description:(Schema.description schema)
+               ~name
+               ~structure:(Transparent_variant child_types)
+               ()
              |> add_type ~t
            | None -> add_existing t Type_description.Presets.jsonaf)
         | { all_of = Some (_ :: _ :: _ as members); _ }, _, _ ->

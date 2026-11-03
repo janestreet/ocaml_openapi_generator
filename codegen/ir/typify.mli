@@ -9,6 +9,16 @@ module Type_id : sig
   module Map : Map_intf.S with type Key.t = t
 end
 
+(** A field of a [Record], along with the [description] from the spec (if any). *)
+module Property : sig
+  type t =
+    { type_id : Type_id.t
+    ; necessity : [ `Required | `Optional ]
+    ; description : string option
+    }
+  [@@deriving sexp]
+end
+
 (** How a type is constructed in OCaml *)
 module Type_structure : sig
   type t =
@@ -16,7 +26,7 @@ module Type_structure : sig
     | Object_variant of (Type_id.t * Name.t) list * string
     | Transparent_variant of (Type_id.t * Name.t) list
     | Record of
-        { properties : (Type_id.t * [ `Required | `Optional ]) Name.Map.t
+        { properties : Property.t Name.Map.t
         ; additional_properties : [ `Not_allowed | `Explicit of Type_id.t | `Allowed ]
         }
     | List of Type_id.t
@@ -53,10 +63,16 @@ module Type : sig
   type t =
     { name : Name.t (** module name that should be generated *)
     ; structure : Type_structure.t
+    ; description : string option (** the [description] from the spec, if any *)
     }
   [@@deriving fields ~getters ~setters, sexp]
 
-  val create : name:string -> structure:Type_structure.t -> unit -> t
+  val create
+    :  ?description:string
+    -> name:string
+    -> structure:Type_structure.t
+    -> unit
+    -> t
 end
 
 module Type_space : sig

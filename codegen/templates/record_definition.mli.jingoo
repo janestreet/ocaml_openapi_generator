@@ -1,0 +1,13 @@
+{%- autoescape false -%}
+{% if description %}(** {{ description }} *)
+{% endif %}type t =
+  {
+  {%- for field in fields %}
+    {{ field.name }} : {{ field.mli_type_reference }};{% if field.description %} (** {{ field.description }} *){% endif %}
+  {%- endfor %}
+  {%- if additional_properties %}
+    {{ additional_properties.field_name }} : (string * {{ additional_properties.mli_type_reference }}) list;
+  {%- endif %}
+  }
+[@@deriving fields ~getters, sexp, compare, jsonaf{%- for d in extra_derivers %}, {{ d }}{%- endfor %}]
+{%- endautoescape -%}

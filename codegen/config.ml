@@ -2,6 +2,25 @@ open! Core
 open! Async
 
 module Code_gen = struct
+  module Extra_derivers = struct
+    type t =
+      { record : string list [@name "extra-record-derivers"]
+      (** Appended to every generated record type (e.g. [bin_io], [hash]). *)
+      ; string_variant : string list [@name "extra-string-variant-derivers"]
+      (** Appended to every generated string-enum variant type (e.g. [enumerate]). *)
+      ; object_variant : string list [@name "extra-object-variant-derivers"]
+      (** Appended to every generated tagged-object variant type. *)
+      ; transparent_variant : string list [@name "extra-transparent-variant-derivers"]
+      (** Appended to every generated transparent variant type. *)
+      }
+    [@@deriving
+      sexp, fields ~getters ~iterators:make_creator, roundtrippable_command_param]
+
+    let empty =
+      { record = []; string_variant = []; object_variant = []; transparent_variant = [] }
+    ;;
+  end
+
   type t =
     { raise_on_optional_null : bool [@bool_no_arg]
     (** Use the legacy behavior of raising if an optional field contains null *)
@@ -19,6 +38,13 @@ module Code_gen = struct
     ; add_sexp_option_annotations : bool [@bool_no_arg]
     (** Annotate fields that are optional in records using [@sexp.option] in additional to
         [@jsonaf.option]. *)
+    ; propagate_descriptions : bool [@bool_no_arg]
+    (** Propagate [description] fields from the spec into odoc doc comments in the
+        generated [.mli] interfaces (types, record fields, variant constructors, and
+        operations). *)
+    ; extra_derivers : Extra_derivers.t [@roundtrippable_command_param]
+    (** Extra ppx derivers to append to the [[@@deriving ...]] of generated types, split
+        by kind of generated type (see {!Extra_derivers}). *)
     }
   [@@deriving sexp, fields ~getters ~iterators:make_creator, roundtrippable_command_param]
 end

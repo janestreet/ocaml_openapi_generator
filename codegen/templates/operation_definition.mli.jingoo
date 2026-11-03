@@ -1,0 +1,17 @@
+module Params : sig
+{% for operation in operations %}
+  {% if operation.doc_comment %}(** {{ operation.doc_comment }} *)
+  {% endif %}val {{ operation.operation_id }} :
+    {% for param in operation.path_parameters %}{{ param.name }}:{{ param.mli_type_reference }} -> {% endfor %}{% for param in operation.query_parameters %}{% if param.is_required %}{{ param.name }}{% else %}?{{ param.name }}{% endif %}:{{ param.mli_type_reference }} -> {% endfor %}{% if operation.has_body %}body:{{ operation.body_mli_type }} -> {% endif %}unit
+    -> Openapi_runtime.Client.Params.t Core.Or_error.t
+{% endfor %}
+end
+
+module Operations : sig
+{% for operation in operations %}
+  {% if operation.doc_comment %}(** {{ operation.doc_comment }} *)
+  {% endif %}val {{ operation.operation_id }} :
+    {% for param in operation.path_parameters %}{{ param.name }}:{{ param.mli_type_reference }} -> {% endfor %}{% for param in operation.query_parameters %}{% if param.is_required %}{{ param.name }}{% else %}?{{ param.name }}{% endif %}:{{ param.mli_type_reference }} -> {% endfor %}{% if operation.has_body %}body:{{ operation.body_mli_type }} -> {% endif %}(_, _) Openapi_runtime.Client.t
+    -> {{ operation.response_mli_type }} Async.Deferred.Or_error.t
+{% endfor %}
+end

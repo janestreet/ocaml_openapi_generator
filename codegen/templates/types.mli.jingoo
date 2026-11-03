@@ -1,0 +1,3 @@
+{% for type_ in types %}
+module {{ type_.nice_name }} = {{ type_.real_name }}
+{% endfor %}
